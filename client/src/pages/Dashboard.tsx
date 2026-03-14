@@ -79,7 +79,7 @@ export default function Dashboard() {
   // Prop firm
   const [propConfig, setPropConfig] = useState<PropConfig>(() => loadPropConfig());
   const [editingProp, setEditingProp] = useState(false);
-  const [propDraft, setPropDraft] = useState<PropConfig>(propConfig);
+  const [propDraft, setPropDraft] = useState<Record<string, string>>({});
 
   useEffect(() => { localStorage.setItem("traderName", name); }, [name]);
   useEffect(() => { localStorage.setItem("traderQuote", quote); }, [quote]);
@@ -96,8 +96,17 @@ export default function Dashboard() {
   };
 
   const saveProp = () => {
-    setPropConfig(propDraft);
-    savePropConfig(propDraft);
+    const updated: PropConfig = {
+      phase: propDraft.phase || propConfig.phase,
+      accountSize: parseFloat(propDraft.accountSize) || propConfig.accountSize,
+      riskPercent: parseFloat(propDraft.riskPercent) || propConfig.riskPercent,
+      profitTarget: parseFloat(propDraft.profitTarget) || propConfig.profitTarget,
+      maxDrawdown: parseFloat(propDraft.maxDrawdown) || propConfig.maxDrawdown,
+      dailyLoss: parseFloat(propDraft.dailyLoss) || propConfig.dailyLoss,
+      startDate: propDraft.startDate || propConfig.startDate,
+    };
+    setPropConfig(updated);
+    savePropConfig(updated);
     setEditingProp(false);
   };
 
@@ -258,7 +267,18 @@ export default function Dashboard() {
                     </button>
                   ))}
                 </div>
-                <button onClick={() => { setPropDraft(propConfig); setEditingProp(true); }}
+                <button onClick={() => { 
+                  setPropDraft({
+                    phase: propConfig.phase,
+                    accountSize: String(propConfig.accountSize),
+                    riskPercent: String(propConfig.riskPercent),
+                    profitTarget: String(propConfig.profitTarget),
+                    maxDrawdown: String(propConfig.maxDrawdown),
+                    dailyLoss: String(propConfig.dailyLoss),
+                    startDate: propConfig.startDate,
+                  }); 
+                  setEditingProp(true); 
+                }}
                   className="text-xs text-[#444] hover:text-white transition-colors">Edit</button>
               </div>
             </div>
@@ -454,10 +474,11 @@ export default function Dashboard() {
               ].map(f => (
                 <div key={f.key}>
                   <label className="block text-xs text-[#444] mb-1.5">{f.label}</label>
-                  <input type={f.type} value={(propDraft as any)[f.key]}
-                    onChange={(e) => setPropDraft({ ...propDraft, [f.key]: f.type === "number" ? parseFloat(e.target.value) || 0 : e.target.value })}
+                  <input type={f.type} value={propDraft[f.key] ?? ""}
+                    onChange={(e) => setPropDraft({ ...propDraft, [f.key]: e.target.value })}
                     className="w-full bg-[#080808] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]"
-                    style={{ colorScheme: "dark" }} />
+                    style={{ colorScheme: "dark" }}
+                    onFocus={(e) => e.target.select()} />
                 </div>
               ))}
               <div className="flex gap-2 pt-2">
