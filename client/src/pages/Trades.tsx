@@ -1,29 +1,31 @@
-import { useState, useMemo, useRef, useCallback } from "react";
-import { Plus, X, Trash2, Edit2, ChevronLeft, ChevronRight, ExternalLink, BookOpen, ImagePlus, ZoomIn } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { Plus, X, Trash2, Edit2, ChevronLeft, ChevronRight, BookOpen, ImagePlus, ZoomIn } from "lucide-react";
 import { useTradeContext } from "@/contexts/TradeContext";
 import { useYearFilter } from "@/contexts/YearFilterContext";
 import { classifyOutcome, formatDate, formatR } from "@/lib/tradeUtils";
 import type { Trade } from "@shared/schema";
 
 const TRADES_PER_PAGE = 20;
-const DAILY_BIAS_KEY = "tj_daily_bias_v1";
+const DAILY_BIAS_KEY = "tj_daily_bias_v2";
 
-function loadBiasEntries(): Record<string, { text: string; images: string[] }> {
-  try {
-    const raw = localStorage.getItem(DAILY_BIAS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    // migrate old format (plain strings)
-    const migrated: Record<string, { text: string; images: string[] }> = {};
-    for (const [k, v] of Object.entries(parsed)) {
-      if (typeof v === "string") migrated[k] = { text: v, images: [] };
-      else migrated[k] = v as any;
-    }
-    return migrated;
-  } catch { return {}; }
+interface BiasEntry {
+  id: string;
+  date: string;
+  asset: string;
+  text: string;
+  images: string[];
+  createdAt: number;
 }
 
-function saveBiasEntries(entries: Record<string, { text: string; images: string[] }>) {
+function loadBiasEntries(): BiasEntry[] {
+  try {
+    const raw = localStorage.getItem(DAILY_BIAS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch { return []; }
+}
+
+function saveBiasEntries(entries: BiasEntry[]) {
   try { localStorage.setItem(DAILY_BIAS_KEY, JSON.stringify(entries)); } catch {}
 }
 
@@ -72,14 +74,13 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-type ActiveView = "trades" | "bias";
+type ActiveView = "trades" | "bias-list" | "bias-editor";
 
 export default function Trades() {
   const { trades, settings, addTrade, updateTrade, deleteTrade } = useTradeContext();
   const { year } = useYearFilter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const biasImageInputRef = useRef<HTMLInputElement | null>(null);
-  const tradeImageInputRef = useRef<HTMLInputElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>("trades");
@@ -95,25 +96,66 @@ export default function Trades() {
   const [filterTo, setFilterTo] = useState("");
 
   // Daily bias
-  const [biasEntries, setBiasEntries] = useState<Record<string, { text: string; images: string[] }>>(() => loadBiasEntries());
+  const [biasEntries, setBiasEntries] = useState<BiasEntry[]>(() => loadBiasEntries());
   const [selectedBiasDate, setSelectedBiasDate] = useState(getTodayKey());
-  const [biasText, setBiasText] = useState(() => loadBiasEntries()[getTodayKey()]?.text || "");
-  const [biasImages, setBiasImages] = useState<string[]>(() => loadBiasEntries()[getTodayKey()]?.images || []);
+  const [biasAsset, setBiasAsset] = useState("");
+  const [biasText, setBiasText] = useState("");
+  const [biasImages, setBiasImages] = useState<string[]>([]);
   const [biasSaved, setBiasSaved] = useState(false);
+  const [editingBiasId, setEditingBiasId] = useState<string | null>(null);
 
   const saveBias = () => {
-    const updated = { ...biasEntries, [selectedBiasDate]: { text: biasText, images: biasImages } };
+    let updated: BiasEntry[];
+    if (editingBiasId) {
+      updated = biasEntries.map(e => e.id === editingBiasId
+        ? { ...e, date: selectedBiasDate, asset: biasAsset, text: biasText, images: biasImages }
+        : e
+      );
+    } else {
+      const newEntry: BiasEntry = {
+        id: crypto.randomUUID(),
+        date: selectedBiasDate,
+        asset: biasAsset,
+        text: biasText,
+        images: biasImages,
+        createdAt: Date.now(),
+      };
+      updated = [newEntry, ...biasEntries];
+    }
     setBiasEntries(updated);
     saveBiasEntries(updated);
     setBiasSaved(true);
-    setTimeout(() => setBiasSaved(false), 1500);
+    setTimeout(() => {
+      setBiasSaved(false);
+      setActiveView("bias-list");
+    }, 800);
   };
 
-  const loadBiasForDate = (date: string) => {
-    setSelectedBiasDate(date);
-    setBiasText(biasEntries[date]?.text || "");
-    setBiasImages(biasEntries[date]?.images || []);
+  const openNewBias = () => {
+    setEditingBiasId(null);
+    setSelectedBiasDate(getTodayKey());
+    setBiasAsset("");
+    setBiasText("");
+    setBiasImages([]);
     setBiasSaved(false);
+    setActiveView("bias-editor");
+  };
+
+  const openBiasEditor = (entry: BiasEntry) => {
+    setEditingBiasId(entry.id);
+    setSelectedBiasDate(entry.date);
+    setBiasAsset(entry.asset);
+    setBiasText(entry.text);
+    setBiasImages(entry.images);
+    setBiasSaved(false);
+    setActiveView("bias-editor");
+  };
+
+  const deleteBiasEntry = (id: string) => {
+    if (!confirm("Delete this bias entry?")) return;
+    const updated = biasEntries.filter(e => e.id !== id);
+    setBiasEntries(updated);
+    saveBiasEntries(updated);
   };
 
   const handleBiasImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,20 +180,12 @@ export default function Trades() {
     symbol: "", account: "", model: "", session: "", entryTF: "",
     position: "Long", riskPercent: "", realisedR: "", maxR: "",
     setupGrade: "", keyLevels: [] as string[], mistakes: [] as string[],
-    tradeImage: "", // base64
+    tradeImage: "",
+    tradeImage2: "",
+    tradeImage3: "",
     notes: "",
   };
   const [formData, setFormData] = useState(emptyForm);
-
-  const handleTradeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const b64 = await fileToBase64(file);
-      setFormData(prev => ({ ...prev, tradeImage: b64 }));
-    } catch { alert("Failed to load image"); }
-    if (tradeImageInputRef.current) tradeImageInputRef.current.value = '';
-  };
 
   const yearFilteredTrades = useMemo(() => {
     if (year === "all") return trades;
@@ -205,7 +239,10 @@ export default function Trades() {
     let maxR = realisedR;
     if (formData.maxR) { const p = parseFloat(formData.maxR); if (!isNaN(p)) maxR = p; }
 
-    const screenshots = formData.tradeImage ? JSON.stringify([formData.tradeImage]) : '';
+    const screenshots = [formData.tradeImage, formData.tradeImage2, formData.tradeImage3]
+      .filter(Boolean).length > 0
+      ? JSON.stringify([formData.tradeImage, formData.tradeImage2, formData.tradeImage3].filter(Boolean))
+      : '';
 
     const payload = {
       date: formData.date, symbol: formData.symbol.toUpperCase(),
@@ -234,6 +271,8 @@ export default function Trades() {
       keyLevels: Array.isArray(t.keyLevels) ? t.keyLevels : [],
       mistakes: Array.isArray(t.mistakes) ? t.mistakes : [],
       tradeImage: scrArr[0] || "",
+      tradeImage2: scrArr[1] || "",
+      tradeImage3: scrArr[2] || "",
       notes: t.notes || "",
     });
     setIsFormOpen(true);
@@ -293,8 +332,6 @@ export default function Trades() {
     reader.readAsText(file);
   };
 
-  const biasDateList = Object.keys(biasEntries).sort((a, b) => b.localeCompare(a)).slice(0, 30);
-
   return (
     <div className="flex flex-col min-h-screen p-6 max-w-[1400px]" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}>
       {/* Header */}
@@ -309,8 +346,8 @@ export default function Trades() {
               className={`px-3 py-2 transition-colors ${activeView === "trades" ? "bg-[#1a1a1a] text-white" : "text-[#555] hover:text-white"}`}>
               Trades
             </button>
-            <button onClick={() => setActiveView("bias")}
-              className={`px-3 py-2 flex items-center gap-1.5 transition-colors ${activeView === "bias" ? "bg-[#1a1a1a] text-white" : "text-[#555] hover:text-white"}`}>
+            <button onClick={() => setActiveView("bias-list")}
+              className={`px-3 py-2 flex items-center gap-1.5 transition-colors ${activeView === "bias-list" || activeView === "bias-editor" ? "bg-[#1a1a1a] text-white" : "text-[#555] hover:text-white"}`}>
               <BookOpen className="w-3.5 h-3.5" /> Daily Bias
             </button>
           </div>
@@ -324,98 +361,161 @@ export default function Trades() {
         </div>
       </div>
 
-      {/* ── Daily Bias View ── */}
-      {activeView === "bias" && (
-        <div className="flex gap-6 flex-1">
-          {/* Sidebar */}
-          <div className="w-44 flex-shrink-0">
-            <p className="text-xs text-[#444] uppercase tracking-wider mb-3">Entries</p>
-            <div className="space-y-0.5">
-              <button onClick={() => loadBiasForDate(getTodayKey())}
-                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${selectedBiasDate === getTodayKey() ? "bg-[#1a1a1a] text-white" : "text-[#555] hover:text-[#888]"}`}>
-                <span>Today</span>
-                {biasEntries[getTodayKey()] && <span className="w-1.5 h-1.5 rounded-full bg-[#00d28a]" />}
-              </button>
-              {biasDateList.filter(d => d !== getTodayKey()).map(date => (
-                <button key={date} onClick={() => loadBiasForDate(date)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${selectedBiasDate === date ? "bg-[#1a1a1a] text-white" : "text-[#555] hover:text-[#888]"}`}>
-                  {new Date(date + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                </button>
-              ))}
-              {biasDateList.length === 0 && <p className="text-xs text-[#333] px-3 mt-2">No entries yet</p>}
+      {/* ── Daily Bias List ── */}
+      {activeView === "bias-list" && (
+        <div className="flex-1">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Daily Bias</h2>
+              <p className="text-sm text-[#555] mt-0.5">{biasEntries.length} entries logged</p>
             </div>
+            <button onClick={openNewBias}
+              className="px-4 py-2 rounded-lg bg-white text-black text-xs font-semibold hover:bg-[#e8e8e8] transition-colors flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Log Daily Bias
+            </button>
           </div>
-
-          {/* Editor */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-lg font-semibold text-white">
-                  {selectedBiasDate === getTodayKey() ? "Today" : new Date(selectedBiasDate + 'T00:00:00').toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                </h2>
-                <p className="text-xs text-[#444] mt-0.5">Pre-session analysis and plan</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="date" value={selectedBiasDate} onChange={(e) => loadBiasForDate(e.target.value)}
-                  className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-lg px-3 py-1.5 text-xs text-white" style={{ colorScheme: "dark" }} />
-                <button onClick={() => biasImageInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors flex items-center gap-1.5">
-                  <ImagePlus className="w-3.5 h-3.5" /> Add Image
-                </button>
-                <input ref={biasImageInputRef} type="file" accept="image/*" onChange={handleBiasImageUpload} style={{ display: "none" }} />
-                <button onClick={saveBias}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${biasSaved ? "bg-[#00d28a] text-black" : "bg-white text-black hover:bg-[#e8e8e8]"}`}>
-                  {biasSaved ? "✓ Saved" : "Save"}
-                </button>
-              </div>
+          {biasEntries.length === 0 ? (
+            <div className="rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] p-12 text-center">
+              <p className="text-[#555] text-sm mb-4">No bias entries yet</p>
+              <button onClick={openNewBias}
+                className="px-4 py-2 rounded-lg bg-white text-black text-xs font-semibold hover:bg-[#e8e8e8] transition-colors">
+                Log Today's Bias
+              </button>
             </div>
+          ) : (
+            <div className="rounded-xl border border-[#1e1e1e] overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left bg-[#080808] border-b border-[#1a1a1a]">
+                    <th className="px-5 py-3 text-xs text-[#333] font-medium">Date</th>
+                    <th className="px-5 py-3 text-xs text-[#333] font-medium">Pair / Asset</th>
+                    <th className="px-5 py-3 text-xs text-[#333] font-medium">Preview</th>
+                    <th className="px-5 py-3 text-xs text-[#333] font-medium">Images</th>
+                    <th className="px-5 py-3 text-xs text-[#333] font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {biasEntries
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map((entry) => (
+                    <tr key={entry.id} className="border-t border-[#111] hover:bg-[#0d0d0d] transition-colors group">
+                      <td className="px-5 py-3">
+                        <p className="text-sm font-medium text-white">
+                          {entry.date === getTodayKey() ? "Today" : new Date(entry.date + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                        <p className="text-xs text-[#333] mt-0.5">{entry.date}</p>
+                      </td>
+                      <td className="px-5 py-3">
+                        {entry.asset ? (
+                          <span className="text-xs px-2 py-1 rounded-lg border border-[#1e1e1e] text-white font-medium">{entry.asset}</span>
+                        ) : (
+                          <span className="text-xs text-[#333]">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 max-w-xs">
+                        <p className="text-xs text-[#555] truncate">{entry.text?.slice(0, 80) || "—"}</p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex gap-1">
+                          {entry.images?.slice(0, 3).map((src, i) => (
+                            <div key={i} className="w-8 h-7 rounded overflow-hidden border border-[#1e1e1e]">
+                              <img src={src} alt="" className="w-full h-full object-cover" />
+                            </div>
+                          ))}
+                          {(!entry.images || entry.images.length === 0) && <span className="text-xs text-[#333]">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => openBiasEditor(entry)}
+                            className="text-xs text-[#444] hover:text-white transition-colors">Edit</button>
+                          <button onClick={() => deleteBiasEntry(entry.id)}
+                            className="text-xs text-[#444] hover:text-[#ff4f4f] transition-colors">Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
-            {/* Text area */}
-            <textarea value={biasText}
-              onChange={(e) => { setBiasText(e.target.value); setBiasSaved(false); }}
-              placeholder={"DXY Context:\n\n\nEU Bias:\n\n\nGU Bias:\n\n\nGold Bias:\n\n\nGER40 Bias:\n\n\nKey levels to watch:\n\n\nPlan for today:"}
-              className="w-full bg-transparent border-none text-sm text-white placeholder-[#2a2a2a] resize-none focus:outline-none leading-relaxed mb-6"
-              style={{ minHeight: "320px", fontFamily: "inherit" }} />
-
-            {/* Images grid */}
-            {biasImages.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {biasImages.map((src, i) => (
-                  <div key={i} className="relative group rounded-xl overflow-hidden border border-[#1e1e1e]">
-                    <img src={src} alt={`Bias image ${i + 1}`} className="w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                      style={{ maxHeight: "280px", objectFit: "cover" }}
-                      onClick={() => setLightboxSrc(src)} />
-                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setLightboxSrc(src)}
-                        className="w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors">
-                        <ZoomIn className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => removeBiasImage(i)}
-                        className="w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center text-[#ff4f4f] hover:bg-black/80 transition-colors">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {/* Add more */}
-                <button onClick={() => biasImageInputRef.current?.click()}
-                  className="rounded-xl border border-dashed border-[#1e1e1e] flex flex-col items-center justify-center gap-2 text-[#444] hover:text-[#666] hover:border-[#333] transition-colors"
-                  style={{ minHeight: "120px" }}>
-                  <ImagePlus className="w-5 h-5" />
-                  <span className="text-xs">Add image</span>
-                </button>
-              </div>
-            )}
-
-            {/* Drop zone when no images */}
-            {biasImages.length === 0 && (
+      {/* ── Daily Bias Editor ── */}
+      {activeView === "bias-editor" && (
+        <div className="flex-1 flex flex-col max-w-3xl">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <button onClick={() => setActiveView("bias-list")}
+                className="text-xs text-[#444] hover:text-white transition-colors mb-2 flex items-center gap-1">
+                ← Back to entries
+              </button>
+              <h2 className="text-lg font-semibold text-white">
+                {editingBiasId ? "Edit Bias" : "New Bias Entry"}
+              </h2>
+              <p className="text-xs text-[#444] mt-0.5">Pre-session analysis and plan</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="date" value={selectedBiasDate}
+                onChange={(e) => { setSelectedBiasDate(e.target.value); setBiasSaved(false); }}
+                className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-lg px-3 py-1.5 text-xs text-white" style={{ colorScheme: "dark" }} />
+              <input
+                type="text"
+                value={biasAsset}
+                onChange={(e) => { setBiasAsset(e.target.value); setBiasSaved(false); }}
+                placeholder="Pair (EU, GU, Gold...)"
+                className="bg-[#0d0d0d] border border-[#1e1e1e] rounded-lg px-3 py-1.5 text-xs text-white w-36 focus:outline-none focus:border-[#333]"
+              />
               <button onClick={() => biasImageInputRef.current?.click()}
-                className="w-full rounded-xl border border-dashed border-[#1a1a1a] py-8 flex flex-col items-center gap-2 text-[#333] hover:text-[#555] hover:border-[#2a2a2a] transition-colors">
-                <ImagePlus className="w-5 h-5" />
-                <span className="text-xs">Upload chart screenshots or images</span>
+                className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-[#555] hover:text-white transition-colors flex items-center gap-1.5">
+                <ImagePlus className="w-3.5 h-3.5" /> Add Image
               </button>
-            )}
+              <input ref={biasImageInputRef} type="file" accept="image/*" onChange={handleBiasImageUpload} style={{ display: "none" }} />
+              <button onClick={saveBias}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${biasSaved ? "bg-[#00d28a] text-black" : "bg-white text-black hover:bg-[#e8e8e8]"}`}>
+                {biasSaved ? "✓ Saved" : "Save"}
+              </button>
+            </div>
           </div>
+          <textarea value={biasText}
+            onChange={(e) => { setBiasText(e.target.value); setBiasSaved(false); }}
+            placeholder={"DXY Context:\n\n\nEU Bias:\n\n\nGU Bias:\n\n\nGold Bias:\n\n\nGER40 Bias:\n\n\nKey levels to watch:\n\n\nPlan for today:"}
+            className="w-full bg-transparent border-none text-sm text-white placeholder-[#222] resize-none focus:outline-none leading-relaxed mb-6"
+            style={{ minHeight: "320px", fontFamily: "inherit" }} />
+          {biasImages.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {biasImages.map((src, i) => (
+                <div key={i} className="relative group rounded-xl overflow-hidden border border-[#1e1e1e]">
+                  <img src={src} alt={`Bias image ${i + 1}`} className="w-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    style={{ maxHeight: "280px", objectFit: "cover" }} onClick={() => setLightboxSrc(src)} />
+                  <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setLightboxSrc(src)}
+                      className="w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center text-white hover:bg-black/80">
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setBiasImages(prev => prev.filter((_, j) => j !== i))}
+                      className="w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center text-[#ff4f4f] hover:bg-black/80">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => biasImageInputRef.current?.click()}
+                className="rounded-xl border border-dashed border-[#1e1e1e] flex flex-col items-center justify-center gap-2 text-[#333] hover:text-[#555] transition-colors"
+                style={{ minHeight: "120px" }}>
+                <ImagePlus className="w-5 h-5" />
+                <span className="text-xs">Add image</span>
+              </button>
+            </div>
+          )}
+          {biasImages.length === 0 && (
+            <button onClick={() => biasImageInputRef.current?.click()}
+              className="w-full rounded-xl border border-dashed border-[#1a1a1a] py-8 flex flex-col items-center gap-2 text-[#222] hover:text-[#444] hover:border-[#222] transition-colors">
+              <ImagePlus className="w-5 h-5" />
+              <span className="text-xs">Upload chart screenshots or images</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -478,8 +578,6 @@ export default function Trades() {
                   ) : paginatedTrades.map((t, idx) => {
                     const outcome = classifyOutcome(t.realisedR);
                     const scrArr = parseScreenshots(t.screenshots);
-                    const imageUrl = scrArr[0] || "";
-                    const isBase64 = imageUrl.startsWith("data:");
                     const globalIdx = (currentPage - 1) * TRADES_PER_PAGE + idx + 1;
                     return (
                       <tr key={t.id} className="border-t border-[#111] hover:bg-[#0d0d0d] transition-colors group">
@@ -510,22 +608,26 @@ export default function Trades() {
                           ) : <span className="text-xs text-[#222]">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          {imageUrl ? (
-                            isBase64 ? (
-                              <button onClick={() => setLightboxSrc(imageUrl)}
-                                className="w-10 h-8 rounded-lg overflow-hidden border border-[#1e1e1e] hover:border-[#333] transition-colors relative group/img">
-                                <img src={imageUrl} alt="Trade" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
-                                  <ZoomIn className="w-3 h-3 text-white" />
-                                </div>
-                              </button>
-                            ) : (
-                              <a href={normalizeHref(imageUrl)} target="_blank" rel="noopener noreferrer"
-                                className="text-xs px-2 py-1 rounded border border-[#1e1e1e] text-[#444] hover:text-white hover:border-[#333] transition-colors flex items-center gap-1 w-fit">
-                                View <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            )
-                          ) : <span className="text-xs text-[#222]">—</span>}
+                          <div className="flex gap-1">
+                            {scrArr.slice(0, 3).map((url, i) => {
+                              const isB64 = url.startsWith("data:");
+                              return isB64 ? (
+                                <button key={i} onClick={() => setLightboxSrc(url)}
+                                  className="w-8 h-7 rounded overflow-hidden border border-[#1e1e1e] hover:border-[#333] transition-colors flex-shrink-0 relative group/img">
+                                  <img src={url} alt="" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                    <ZoomIn className="w-2.5 h-2.5 text-white" />
+                                  </div>
+                                </button>
+                              ) : (
+                                <a key={i} href={normalizeHref(url)} target="_blank" rel="noopener noreferrer"
+                                  className="text-xs px-1.5 py-1 rounded border border-[#1e1e1e] text-[#444] hover:text-white transition-colors">
+                                  {["E","4H","1H"][i]}
+                                </a>
+                              );
+                            })}
+                            {scrArr.length === 0 && <span className="text-xs text-[#222]">—</span>}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-[#444] max-w-[160px] truncate">{t.notes || "—"}</td>
                         <td className="px-4 py-3">
@@ -677,32 +779,63 @@ export default function Trades() {
                 </div>
               )}
 
-              {/* Trade image upload */}
+              {/* Trade images - 3 slots */}
               <div>
-                <label className="block text-xs text-[#444] mb-2">Trade Screenshot</label>
-                {formData.tradeImage ? (
-                  <div className="relative rounded-xl overflow-hidden border border-[#1e1e1e] group">
-                    <img src={formData.tradeImage} alt="Trade" className="w-full object-cover cursor-pointer max-h-48"
-                      onClick={() => setLightboxSrc(formData.tradeImage)} />
-                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button type="button" onClick={() => setLightboxSrc(formData.tradeImage)}
-                        className="w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors">
-                        <ZoomIn className="w-3.5 h-3.5" />
-                      </button>
-                      <button type="button" onClick={() => setFormData({ ...formData, tradeImage: "" })}
-                        className="w-7 h-7 rounded-lg bg-black/60 flex items-center justify-center text-[#ff4f4f] hover:bg-black/80 transition-colors">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => tradeImageInputRef.current?.click()}
-                    className="w-full py-6 rounded-xl border border-dashed border-[#1e1e1e] flex flex-col items-center gap-2 text-[#333] hover:text-[#555] hover:border-[#2a2a2a] transition-colors">
-                    <ImagePlus className="w-5 h-5" />
-                    <span className="text-xs">Upload trade screenshot</span>
-                  </button>
-                )}
-                <input ref={tradeImageInputRef} type="file" accept="image/*" onChange={handleTradeImageUpload} style={{ display: "none" }} />
+                <label className="block text-xs text-[#444] mb-2">Trade Screenshots <span className="text-[#333]">(Entry, 4H, 1H)</span></label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { key: "tradeImage", label: "Entry" },
+                    { key: "tradeImage2", label: "4H" },
+                    { key: "tradeImage3", label: "1H" },
+                  ] as const).map((slot) => {
+                    const val = formData[slot.key];
+                    return (
+                      <div key={slot.key}>
+                        {val ? (
+                          <div className="relative rounded-xl overflow-hidden border border-[#1e1e1e] group">
+                            <img src={val} alt={slot.label} className="w-full object-cover cursor-pointer"
+                              style={{ height: "80px", objectFit: "cover" }}
+                              onClick={() => setLightboxSrc(val)} />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                              <button type="button" onClick={() => setLightboxSrc(val)}
+                                className="w-6 h-6 rounded bg-black/60 flex items-center justify-center text-white">
+                                <ZoomIn className="w-3 h-3" />
+                              </button>
+                              <button type="button" onClick={() => setFormData(prev => ({ ...prev, [slot.key]: "" }))}
+                                className="w-6 h-6 rounded bg-black/60 flex items-center justify-center text-[#ff4f4f]">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => {
+                            const inp = document.getElementById(`img-upload-${slot.key}`) as HTMLInputElement;
+                            inp?.click();
+                          }}
+                            className="w-full rounded-xl border border-dashed border-[#1e1e1e] flex flex-col items-center justify-center gap-1 text-[#333] hover:text-[#555] hover:border-[#2a2a2a] transition-colors"
+                            style={{ height: "80px" }}>
+                            <ImagePlus className="w-4 h-4" />
+                            <span className="text-xs">{slot.label}</span>
+                          </button>
+                        )}
+                        <input
+                          id={`img-upload-${slot.key}`}
+                          type="file" accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const b64 = await fileToBase64(file);
+                              setFormData(prev => ({ ...prev, [slot.key]: b64 }));
+                            } catch { alert("Failed to load image"); }
+                            e.target.value = '';
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>

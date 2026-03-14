@@ -15,26 +15,30 @@ export function FilterPills({ options, activeId, onChange }: FilterPillsProps) {
             type="button"
             onClick={() => onChange(option.id)}
             data-testid={`filter-${option.id}`}
-            className="filter-pill"
+            className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
             style={{
-              borderWidth: isActive ? "1.5px" : "1px",
-              borderColor: isActive ? "#a78bfa99" : "rgba(90, 90, 90, 0.9)", // 60% opacity
-              background: isActive 
-                ? "radial-gradient(circle at top left, rgba(167, 139, 250, 0.06), rgba(10, 10, 10, 0.98))"
-                : "rgba(10, 10, 10, 0.96)",
-              color: isActive ? "#ffffff" : "#b8b8b8",
-              boxShadow: isActive ? "0 0 6px 1px #a78bfa33" : "none", // 60% opacity
+              transition: "all 0.18s ease",
+              border: isActive ? "1px solid rgba(0,210,138,0.4)" : "1px solid rgba(60,60,60,0.8)",
+              background: isActive ? "rgba(0,210,138,0.08)" : "rgba(10,10,10,0.96)",
+              color: isActive ? "#ffffff" : "#666666",
+              cursor: "pointer",
+            }}
+            onMouseEnter={e => {
+              if (!isActive) {
+                (e.currentTarget as HTMLElement).style.color = "#aaaaaa";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(100,100,100,0.8)";
+              }
+            }}
+            onMouseLeave={e => {
+              if (!isActive) {
+                (e.currentTarget as HTMLElement).style.color = "#666666";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(60,60,60,0.8)";
+              }
             }}
           >
-            <span 
-              className="w-1.5 h-1.5 rounded-full transition-all duration-150"
-              style={{
-                background: "#a78bfa99",
-                boxShadow: isActive ? "0 0 8px #a78bfa33" : "none",
-                opacity: isActive ? 1 : 0,
-                transform: isActive ? "scale(1)" : "scale(0.3)",
-              }}
-            />
+            {isActive && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00d28a]" style={{ boxShadow: "0 0 6px rgba(0,210,138,0.6)" }} />
+            )}
             <span>{option.label}</span>
           </button>
         );

@@ -9,11 +9,9 @@ import { YearFilterProvider } from "@/contexts/YearFilterContext";
 import Dashboard from "@/pages/Dashboard";
 import Trades from "@/pages/Trades";
 import Analytics from "@/pages/Analytics";
-import AdvancedAnalytics from "@/pages/AdvancedAnalytics";
 import Settings from "@/pages/Settings";
 import Mistakes from "./pages/Mistakes";
 import LossTracker from "./pages/LossTracker";
-
 function TradingJournalApp() {
   const [currentPage, setCurrentPage] = useState("dashboard");
 
@@ -29,8 +27,6 @@ function TradingJournalApp() {
         return <Mistakes />;
       case "lossTracker":
         return <LossTracker />;
-      case "advanced":
-        return <AdvancedAnalytics />;
       case "settings":
         return <Settings />;
       default:
@@ -39,9 +35,9 @@ function TradingJournalApp() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen" style={{ background: "#020202" }}>
       <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col min-h-screen overflow-hidden" style={{ background: "#020202" }}>
         {renderPage()}
       </main>
     </div>

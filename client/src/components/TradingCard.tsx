@@ -8,50 +8,25 @@ interface TradingCardProps {
   headerActions?: ReactNode;
 }
 
-export function TradingCard({
-  title,
-  subtitle,
-  children,
-  className = "",
-  headerActions,
-}: TradingCardProps) {
+export function TradingCard({ title, subtitle, children, className = "", headerActions }: TradingCardProps) {
   return (
     <div
-  className={`rounded-[22px] pt-3.5 px-3.5 pb-2 relative overflow-hidden ${className}`}
-  style={
-    className.includes("no-glow")
-      ? {
-          background: "#000000",
-        }
-      : {
-          background:
-            "radial-gradient(circle at top left, #161616 0, #050505 45%, #020202 100%)",
-          boxShadow: "0 18px 45px rgba(0, 0, 0, 0.9)",
-        }
-  }
->
-      <div className="relative z-10 px-3.5 pb-3 pt-3">
+      className={`rounded-2xl relative overflow-hidden ${className}`}
+      style={{
+        background: "#0a0a0a",
+        border: "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      <div className="px-5 py-4">
         {title && (
-          <div className="flex justify-between items-center gap-2.5 mb-2 flex-wrap">
+          <div className="flex justify-between items-center gap-2.5 mb-3 flex-wrap">
             <div>
-              <div className="text-[0.9rem] font-semibold uppercase tracking-wider">
-                {title}
-              </div>
-              {subtitle && (
-                <div className="text-[0.78rem] text-[#b8b8b8]">
-                  {subtitle}
-                </div>
-              )}
+              <div className="text-sm font-semibold text-white tracking-wide">{title}</div>
+              {subtitle && <div className="text-xs text-[#444] mt-0.5">{subtitle}</div>}
             </div>
-
-            {headerActions && (
-              <div className="flex items-center gap-2">
-                {headerActions}
-              </div>
-            )}
+            {headerActions && <div className="flex items-center gap-2">{headerActions}</div>}
           </div>
         )}
-
         {children}
       </div>
     </div>

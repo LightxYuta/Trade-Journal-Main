@@ -68,18 +68,24 @@ export function Calendar({ trades, onDayClick }: CalendarProps) {
     const monthTrades = trades.filter(t => t.date?.startsWith(monthPrefix));
     const totalR = monthTrades.reduce((sum, t) => sum + (t.realisedR || 0), 0);
     const activeDays = new Set(monthTrades.map(t => t.date)).size;
-    
+    const wins = monthTrades.filter(t => (t.realisedR || 0) > 0.0001).length;
+    const losses = monthTrades.filter(t => (t.realisedR || 0) < -0.0001).length;
+    const bes = monthTrades.filter(t => Math.abs(t.realisedR || 0) <= 0.0001).length;
+    const total = monthTrades.length;
+    const winRate = total > 0 ? (wins / total) * 100 : 0;
+    const avgR = total > 0 ? totalR / total : 0;
+
     let bestDay = { date: "", r: -Infinity };
     let worstDay = { date: "", r: Infinity };
-    
+
     Object.entries(dayStats).forEach(([date, stats]) => {
       if (date.startsWith(monthPrefix)) {
         if (stats.totalR > bestDay.r) bestDay = { date, r: stats.totalR };
         if (stats.totalR < worstDay.r) worstDay = { date, r: stats.totalR };
       }
     });
-    
-    return { totalR, activeDays, bestDay, worstDay };
+
+    return { totalR, activeDays, bestDay, worstDay, wins, losses, bes, total, winRate, avgR };
   }, [trades, year, month, dayStats]);
 
   const goToPrevMonth = () => {
@@ -284,23 +290,37 @@ export function Calendar({ trades, onDayClick }: CalendarProps) {
         })}
       </div>
 
-      <div className="mt-4 p-3 rounded-[18px] border border-[rgba(60,60,60,0.95)]" style={{ background: "rgba(10, 10, 10, 0.97)" }}>
-        <div className="text-[0.78rem] uppercase tracking-wider text-[#b8b8b8] mb-2">
-          Monthly Summary
+      <div className="mt-4 rounded-2xl border border-[rgba(255,255,255,0.04)] p-4" style={{ background: "#0a0a0a" }}>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs text-[#444] uppercase tracking-wider">Monthly Summary</span>
+          <span className="text-xs text-[#333]">{monthSummary.total} trades · {monthSummary.activeDays} active days</span>
         </div>
-        <div className={`text-lg font-semibold ${
-          monthSummary.totalR > 0 ? "text-[#00d28a]" : monthSummary.totalR < 0 ? "text-[#ff4f4f]" : "text-white"
-        }`}>
-          {monthSummary.totalR >= 0 ? "+" : ""}{monthSummary.totalR.toFixed(2)}R
-        </div>
-        <div className="text-[0.72rem] text-[#b8b8b8] mt-1">
-          {monthSummary.activeDays} active day{monthSummary.activeDays === 1 ? "" : "s"}
-          {monthSummary.bestDay.r > -Infinity && (
-            <> · Best: {monthSummary.bestDay.r.toFixed(2)}R</>
-          )}
-          {monthSummary.worstDay.r < Infinity && (
-            <> · Worst: {monthSummary.worstDay.r.toFixed(2)}R</>
-          )}
+        <div className="grid grid-cols-4 gap-3">
+          <div>
+            <p className="text-xs text-[#444] mb-1">Total R</p>
+            <p className={`text-xl font-bold ${monthSummary.totalR > 0 ? "text-[#00d28a]" : monthSummary.totalR < 0 ? "text-[#ff4f4f]" : "text-white"}`}>
+              {monthSummary.totalR >= 0 ? "+" : ""}{monthSummary.totalR.toFixed(2)}R
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-[#444] mb-1">Win Rate</p>
+            <p className={`text-xl font-bold ${monthSummary.winRate >= 50 ? "text-[#00d28a]" : "text-[#ff4f4f]"}`}>
+              {monthSummary.winRate.toFixed(0)}%
+            </p>
+            <p className="text-[10px] text-[#333]">{monthSummary.wins}W · {monthSummary.losses}L{monthSummary.bes > 0 ? ` · ${monthSummary.bes}BE` : ""}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[#444] mb-1">Best Day</p>
+            <p className="text-xl font-bold text-[#00d28a]">
+              {monthSummary.bestDay.r > -Infinity ? `+${monthSummary.bestDay.r.toFixed(2)}R` : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-[#444] mb-1">Worst Day</p>
+            <p className="text-xl font-bold text-[#ff4f4f]">
+              {monthSummary.worstDay.r < Infinity ? `${monthSummary.worstDay.r.toFixed(2)}R` : "—"}
+            </p>
+          </div>
         </div>
       </div>
     </div>
