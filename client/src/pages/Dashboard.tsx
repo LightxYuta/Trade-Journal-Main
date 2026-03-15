@@ -26,6 +26,7 @@ interface PropConfig {
   accountSize: number;
   riskPercent: number;
   profitTarget: number;
+  profitTargetP2: number;
   maxDrawdown: number;
   dailyLoss: number;
   startDate: string;
@@ -36,6 +37,7 @@ const DEFAULT_PROP: PropConfig = {
   accountSize: 10000,
   riskPercent: 2,
   profitTarget: 8,
+  profitTargetP2: 5,
   maxDrawdown: 10,
   dailyLoss: 5,
   startDate: new Date().toISOString().slice(0, 10),
@@ -101,6 +103,7 @@ export default function Dashboard() {
       accountSize: parseFloat(propDraft.accountSize) || propConfig.accountSize,
       riskPercent: parseFloat(propDraft.riskPercent) || propConfig.riskPercent,
       profitTarget: parseFloat(propDraft.profitTarget) || propConfig.profitTarget,
+      profitTargetP2: parseFloat(propDraft.profitTargetP2) || propConfig.profitTargetP2,
       maxDrawdown: parseFloat(propDraft.maxDrawdown) || propConfig.maxDrawdown,
       dailyLoss: parseFloat(propDraft.dailyLoss) || propConfig.dailyLoss,
       startDate: propDraft.startDate || propConfig.startDate,
@@ -126,7 +129,8 @@ export default function Dashboard() {
   // Prop firm calculations
   const propCalc = useMemo(() => {
     const rPerDollar = propConfig.riskPercent / 100 * propConfig.accountSize;
-    const profitTargetR = (propConfig.profitTarget / 100 * propConfig.accountSize) / rPerDollar;
+    const activeTarget = propConfig.phase === "Phase 2" ? propConfig.profitTargetP2 : propConfig.profitTarget;
+    const profitTargetR = (activeTarget / 100 * propConfig.accountSize) / rPerDollar;
     const maxDrawdownR = (propConfig.maxDrawdown / 100 * propConfig.accountSize) / rPerDollar;
     const dailyLossR = (propConfig.dailyLoss / 100 * propConfig.accountSize) / rPerDollar;
 
@@ -307,7 +311,7 @@ export default function Dashboard() {
               <div className="flex justify-between mt-1">
                 <span className="text-[10px] text-[#333]">0%</span>
                 <span className="text-[10px] text-[#333]">{propCalc.profitPct.toFixed(0)}% complete</span>
-                <span className="text-[10px] text-[#333]">+{propConfig.profitTarget}%</span>
+                <span className="text-[10px] text-[#333]">+{propConfig.phase === "Phase 2" ? propConfig.profitTargetP2 : propConfig.profitTarget}%</span>
               </div>
             </div>
 
@@ -467,7 +471,8 @@ export default function Dashboard() {
               {[
                 { label: "Account Size ($)", key: "accountSize", type: "number" },
                 { label: "Risk per Trade (%)", key: "riskPercent", type: "number" },
-                { label: "Profit Target (%)", key: "profitTarget", type: "number" },
+                { label: "Profit Target P1 (%)", key: "profitTarget", type: "number" },
+                { label: "Profit Target P2 (%)", key: "profitTargetP2", type: "number" },
                 { label: "Max Drawdown (%)", key: "maxDrawdown", type: "number" },
                 { label: "Daily Loss Limit (%)", key: "dailyLoss", type: "number" },
                 { label: "Challenge Start Date", key: "startDate", type: "date" },
