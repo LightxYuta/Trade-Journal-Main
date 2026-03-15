@@ -1,26 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'wouter';
 import {
   LayoutDashboard, FileText, BarChart3,
-  Settings, AlertTriangle, Target
+  Settings, AlertTriangle, Target, LogOut, TrendingUp
 } from "lucide-react";
-
-interface SidebarProps {
-  currentPage: string;
-  onPageChange: (page: string) => void;
-}
+import { supabase } from '@/lib/supabase';
 
 const navItems = [
-  { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard },
-  { id: "trades",      label: "Trades",       icon: FileText },
-  { id: "analytics",   label: "Analytics",    icon: BarChart3 },
-  { id: "mistakes",    label: "Mistakes",     icon: AlertTriangle },
-  { id: "lossTracker", label: "Loss Tracker", icon: Target },
-  { id: "settings",    label: "Settings",     icon: Settings },
+  { path: "/",         label: "Dashboard",         icon: LayoutDashboard },
+  { path: "/trades",   label: "Trades",             icon: FileText },
+  { path: "/analytics",label: "Analytics",          icon: BarChart3 },
+  { path: "/advanced", label: "Advanced Analytics", icon: TrendingUp },
+  { path: "/mistakes", label: "Mistakes",           icon: AlertTriangle },
+  { path: "/loss-tracker", label: "Loss Tracker",   icon: Target },
+  { path: "/settings", label: "Settings",           icon: Settings },
 ];
 
-export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
-  const [now, setNow] = useState(new Date());
+export default function Sidebar() {
+  const [location, navigate] = useLocation();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [now, setNow] = useState(new Date());
   const [title, setTitle] = useState(() => {
     try { return localStorage.getItem('journalTitle') || 'कर्मण्येव अधिकारः'; }
     catch { return 'कर्मण्येव अधिकारः'; }
@@ -34,6 +33,10 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   useEffect(() => {
     try { localStorage.setItem('journalTitle', title); } catch {}
   }, [title]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   return (
     <aside
@@ -69,17 +72,16 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       {/* Nav */}
       <nav className="flex-1 px-3 space-y-0.5">
         {navItems.map((item) => {
-          const isActive = currentPage === item.id;
-          const isHovered = hoveredItem === item.id && !isActive;
+          const isActive = location === item.path;
+          const isHovered = hoveredItem === item.path && !isActive;
           const Icon = item.icon;
 
           return (
             <button
-              key={item.id}
-              onClick={() => onPageChange(item.id)}
-              onMouseEnter={() => setHoveredItem(item.id)}
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              onMouseEnter={() => setHoveredItem(item.path)}
               onMouseLeave={() => setHoveredItem(null)}
-              data-testid={`nav-${item.id}`}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl relative overflow-hidden"
               style={{
                 transition: "background 0.15s ease, color 0.15s ease",
@@ -91,7 +93,6 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                 color: isActive ? "#ffffff" : isHovered ? "#aaaaaa" : "#444444",
               }}
             >
-              {/* Active bar */}
               <div
                 className="absolute left-0 top-1/2 rounded-r-full flex-shrink-0"
                 style={{
@@ -103,7 +104,6 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                   transition: "height 0.2s ease, box-shadow 0.2s ease",
                 }}
               />
-
               <Icon
                 className="flex-shrink-0"
                 style={{
@@ -113,13 +113,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                   transition: "color 0.15s ease",
                 }}
               />
-              <span
-                className="font-medium"
-                style={{
-                  fontSize: "13px",
-                  transition: "color 0.15s ease",
-                }}
-              >
+              <span className="font-medium" style={{ fontSize: "13px" }}>
                 {item.label}
               </span>
             </button>
@@ -127,13 +121,10 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
         })}
       </nav>
 
-      {/* Bottom clock */}
+      {/* Bottom: clock + sign out */}
       <div className="px-5 pb-5 pt-4">
-        <div
-          className="h-px w-full mb-4"
-          style={{ background: "rgba(255,255,255,0.04)" }}
-        />
-        <div className="text-center">
+        <div className="h-px w-full mb-4" style={{ background: "rgba(255,255,255,0.04)" }} />
+        <div className="text-center mb-4">
           <div
             className="tabular-nums text-white font-bold"
             style={{
@@ -146,13 +137,31 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           >
             {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </div>
-          <div
-            className="mt-1"
-            style={{ fontSize: "11px", color: "#333" }}
-          >
+          <div className="mt-1" style={{ fontSize: "11px", color: "#333" }}>
             {now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
           </div>
         </div>
+
+        {/* Sign out */}
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl"
+          style={{
+            color: "#444",
+            transition: "background 0.15s ease, color 0.15s ease",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,60,60,0.08)";
+            (e.currentTarget as HTMLButtonElement).style.color = "#ff6b6b";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+            (e.currentTarget as HTMLButtonElement).style.color = "#444";
+          }}
+        >
+          <LogOut style={{ width: "15px", height: "15px" }} />
+          <span className="font-medium" style={{ fontSize: "13px" }}>Sign Out</span>
+        </button>
       </div>
     </aside>
   );

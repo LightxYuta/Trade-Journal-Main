@@ -1,62 +1,71 @@
-import { useState } from "react";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { useEffect, useState } from "react";
+import { Switch, Route } from "wouter";
+import { supabase } from "@/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 import { TradeProvider } from "@/contexts/TradeContext";
-import { Sidebar } from "@/components/Sidebar";
 import { YearFilterProvider } from "@/contexts/YearFilterContext";
+import { Toaster } from "@/components/ui/toaster";
+import Sidebar from "@/components/Sidebar";
 import Dashboard from "@/pages/Dashboard";
 import Trades from "@/pages/Trades";
 import Analytics from "@/pages/Analytics";
+import AdvancedAnalytics from "@/pages/AdvancedAnalytics";
+import LossTracker from "@/pages/LossTracker";
+import Mistakes from "@/pages/Mistakes";
 import Settings from "@/pages/Settings";
-import Mistakes from "./pages/Mistakes";
-import LossTracker from "./pages/LossTracker";
-function TradingJournalApp() {
-  const [currentPage, setCurrentPage] = useState("dashboard");
-
-  const renderPage = () => {
-    switch (currentPage) {
-      case "dashboard":
-        return <Dashboard />;
-      case "trades":
-        return <Trades />;
-      case "analytics":
-        return <Analytics />;
-      case "mistakes":
-        return <Mistakes />;
-      case "lossTracker":
-        return <LossTracker />;
-      case "settings":
-        return <Settings />;
-      default:
-        return <Dashboard />;
-    }
-  };
-
-  return (
-    <div className="flex min-h-screen" style={{ background: "#020202" }}>
-      <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden" style={{ background: "#020202" }}>
-        {renderPage()}
-      </main>
-    </div>
-  );
-}
-
+import NotFound from "@/pages/not-found";
+import Auth from "@/pages/Auth";
 
 function App() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setChecking(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Auth />;
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <TradeProvider>
-          <YearFilterProvider>
-            <TradingJournalApp />
-            <Toaster />
-          </YearFilterProvider>
-        </TradeProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <TradeProvider>
+      <YearFilterProvider>
+        <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
+          <Sidebar />
+          <main className="flex-1 overflow-y-auto">
+            <Switch>
+              <Route path="/" component={Dashboard} />
+              <Route path="/trades" component={Trades} />
+              <Route path="/analytics" component={Analytics} />
+              <Route path="/advanced" component={AdvancedAnalytics} />
+              <Route path="/loss-tracker" component={LossTracker} />
+              <Route path="/mistakes" component={Mistakes} />
+              <Route path="/settings" component={Settings} />
+              <Route component={NotFound} />
+            </Switch>
+          </main>
+        </div>
+        <Toaster />
+      </YearFilterProvider>
+    </TradeProvider>
   );
 }
 
