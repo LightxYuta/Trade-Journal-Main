@@ -10,7 +10,6 @@ const navItems = [
   { path: "/",         label: "Dashboard",         icon: LayoutDashboard },
   { path: "/trades",   label: "Trades",             icon: FileText },
   { path: "/analytics",label: "Analytics",          icon: BarChart3 },
-  { path: "/advanced", label: "Advanced Analytics", icon: TrendingUp },
   { path: "/mistakes", label: "Mistakes",           icon: AlertTriangle },
   { path: "/loss-tracker", label: "Loss Tracker",   icon: Target },
   { path: "/settings", label: "Settings",           icon: Settings },
