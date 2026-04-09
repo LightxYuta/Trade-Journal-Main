@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import {
   LayoutDashboard, FileText, BarChart3,
-  Settings, AlertTriangle, Target, LogOut, TrendingUp
+  Settings, AlertTriangle, Target, LogOut, TrendingUp, BookMarked
 } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 
@@ -10,6 +10,7 @@ const navItems = [
   { path: "/",         label: "Dashboard",         icon: LayoutDashboard },
   { path: "/trades",   label: "Trades",             icon: FileText },
   { path: "/analytics",label: "Analytics",          icon: BarChart3 },
+  { path: "/protocols",label: "Protocols",          icon: BookMarked },
   { path: "/mistakes", label: "Mistakes",           icon: AlertTriangle },
   { path: "/loss-tracker", label: "Loss Tracker",   icon: Target },
   { path: "/settings", label: "Settings",           icon: Settings },

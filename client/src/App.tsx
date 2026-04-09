@@ -13,6 +13,7 @@ import AdvancedAnalytics from "@/pages/AdvancedAnalytics";
 import LossTracker from "@/pages/LossTracker";
 import Mistakes from "@/pages/Mistakes";
 import Settings from "@/pages/Settings";
+import Protocols from "@/pages/Protocols";
 import NotFound from "@/pages/not-found";
 import Auth from "@/pages/Auth";
 
@@ -58,6 +59,7 @@ function App() {
               <Route path="/advanced" component={AdvancedAnalytics} />
               <Route path="/loss-tracker" component={LossTracker} />
               <Route path="/mistakes" component={Mistakes} />
+              <Route path="/protocols" component={Protocols} />
               <Route path="/settings" component={Settings} />
               <Route component={NotFound} />
             </Switch>
