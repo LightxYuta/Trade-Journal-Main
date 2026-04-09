@@ -20,6 +20,7 @@ import Auth from "@/pages/Auth";
 function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
+  const [sidebarMinimized, setSidebarMinimized] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -50,17 +51,43 @@ function App() {
     <TradeProvider>
       <YearFilterProvider>
         <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">
+          <Sidebar minimized={sidebarMinimized} setMinimized={setSidebarMinimized} />
+          <main
+            className="flex-1 overflow-y-auto transition-all duration-200"
+          >
             <Switch>
               <Route path="/" component={Dashboard} />
-              <Route path="/trades" component={Trades} />
-              <Route path="/analytics" component={Analytics} />
-              <Route path="/advanced" component={AdvancedAnalytics} />
-              <Route path="/loss-tracker" component={LossTracker} />
-              <Route path="/mistakes" component={Mistakes} />
+              <Route path="/trades" component={() => (
+                <div style={sidebarMinimized ? { maxWidth: 900, margin: '0 auto', width: '100%' } : {}}>
+                  <Trades />
+                </div>
+              )} />
+              <Route path="/analytics" component={() => (
+                <div style={sidebarMinimized ? { maxWidth: 1100, margin: '0 auto', width: '100%' } : {}}>
+                  <Analytics />
+                </div>
+              )} />
+              <Route path="/advanced" component={() => (
+                <div style={sidebarMinimized ? { maxWidth: 1100, margin: '0 auto', width: '100%' } : {}}>
+                  <AdvancedAnalytics />
+                </div>
+              )} />
+              <Route path="/loss-tracker" component={() => (
+                <div style={sidebarMinimized ? { maxWidth: 1100, margin: '0 auto', width: '100%' } : {}}>
+                  <LossTracker />
+                </div>
+              )} />
+              <Route path="/mistakes" component={() => (
+                <div style={sidebarMinimized ? { maxWidth: 1100, margin: '0 auto', width: '100%' } : {}}>
+                  <Mistakes />
+                </div>
+              )} />
               <Route path="/protocols" component={Protocols} />
-              <Route path="/settings" component={Settings} />
+              <Route path="/settings" component={() => (
+                <div style={sidebarMinimized ? { maxWidth: 1100, margin: '0 auto', width: '100%' } : {}}>
+                  <Settings />
+                </div>
+              )} />
               <Route component={NotFound} />
             </Switch>
           </main>

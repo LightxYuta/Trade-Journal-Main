@@ -47,11 +47,20 @@ export default function Settings() {
   const [tiltInput, setTiltInput] = useState(settings.tiltThreshold?.toString() ?? "2");
   const [tiltSaved, setTiltSaved] = useState(false);
   const [activeSection, setActiveSection] = useState<ActiveSection>("journal");
+  const [nonNegotiableMistakes, setNonNegotiableMistakes] = useState<string[]>(settings.nonNegotiableMistakes || []);
 
   // Loss conditions state
   const [lossConditions, setLossConditions] = useState(() => loadLossConditions());
   const [editingConditions, setEditingConditions] = useState(false);
   const [conditionDraft, setConditionDraft] = useState(lossConditions);
+
+  const toggleNonNegotiable = (mistake: string) => {
+    const updated = nonNegotiableMistakes.includes(mistake)
+      ? nonNegotiableMistakes.filter(m => m !== mistake)
+      : [...nonNegotiableMistakes, mistake];
+    setNonNegotiableMistakes(updated);
+    updateSettings({ nonNegotiableMistakes: updated });
+  };
 
   const openEditor = (key: SettingsKey) => {
     setEditingKey(key);
@@ -287,6 +296,17 @@ export default function Settings() {
                       className="flex-1 bg-transparent text-sm text-white placeholder-[#444] focus:outline-none"
                       placeholder="Enter value..." />
                   </div>
+                  {editingKey === 'mistakes' && (
+                    <label className="flex items-center gap-1 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={nonNegotiableMistakes.includes(value)}
+                        onChange={() => toggleNonNegotiable(value)}
+                        className="accent-[#00d28a]"
+                      />
+                      <span className="text-[#00d28a] whitespace-nowrap">Non-Neg</span>
+                    </label>
+                  )}
                   <button onClick={() => setEditValues(editValues.filter((_, i) => i !== index))}
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-[#333] hover:text-[#ff4f4f] hover:bg-[#1a0808] border border-transparent hover:border-[#2e1010] transition-all opacity-0 group-hover:opacity-100">
                     <X className="w-3.5 h-3.5" />

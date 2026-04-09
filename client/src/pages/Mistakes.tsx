@@ -10,12 +10,6 @@ function isCleanLoss(mistake: string) {
 
 type SortMode = "impact" | "frequency";
 
-const HARD_RULES = [
-  { key: "trapped", label: "Trapped OF", match: "trapped of", description: "No trades with Trap OF present" },
-  { key: "overextended", label: "Overextended", match: "overextended", description: "No trades when price is overextended" },
-  { key: "reentry", label: "Re-entry", match: "re-entry", description: "No re-entries after stops" },
-];
-
 function getWeekKey(date: Date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -24,8 +18,16 @@ function getWeekKey(date: Date) {
 }
 
 export default function Mistakes() {
-  const { trades } = useTradeContext();
+  const { trades, settings } = useTradeContext();
   const { year } = useYearFilter();
+  
+  const HARD_RULES = (settings.nonNegotiableMistakes || []).map((mistake: string) => ({
+    key: mistake.toLowerCase().replace(/ /g, "-"),
+    label: mistake,
+    match: mistake.toLowerCase(),
+    description: "Rule: " + mistake,
+  }));
+
   const [selectedSession, setSelectedSession] = useState<string>("All");
   const [selectedModel, setSelectedModel] = useState<string>("All");
   const [dateFilter, setDateFilter] = useState<"all" | "week" | "month" | "custom">("all");
