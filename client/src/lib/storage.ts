@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id'> = {
   setupGrades: ['A+', 'A', 'B', 'Retard'],
   keyLevels: ['1H', '4H', 'M30'],
   mistakes: ['Against 1H OF', '1H Consolidation', 'Trapped OF', 'Overextended Prev Session/Day'],
+  nonNegotiableMistakes: [],
   tiltThreshold: 2,
 };
 
@@ -164,6 +165,7 @@ export async function loadSettings(): Promise<Omit<Settings, 'id'>> {
     setupGrades: data.setup_grades || DEFAULT_SETTINGS.setupGrades,
     keyLevels: data.key_levels || DEFAULT_SETTINGS.keyLevels,
     mistakes: data.mistakes || DEFAULT_SETTINGS.mistakes,
+    nonNegotiableMistakes: data.non_negotiable_mistakes || [],
     tiltThreshold: data.tilt_threshold ?? DEFAULT_SETTINGS.tiltThreshold,
   };
 }
@@ -181,6 +183,7 @@ export async function saveSettings(settings: Omit<Settings, 'id'>): Promise<void
     setup_grades: settings.setupGrades,
     key_levels: settings.keyLevels,
     mistakes: settings.mistakes,
+    non_negotiable_mistakes: settings.nonNegotiableMistakes || [],
     tilt_threshold: settings.tiltThreshold,
   };
 

@@ -24,8 +24,9 @@ export default function Mistakes() {
   const HARD_RULES = (settings.nonNegotiableMistakes || []).map((mistake: string) => ({
     key: mistake.toLowerCase().replace(/ /g, "-"),
     label: mistake,
+    // exact match (case-insensitive) to avoid "OE Type 1" matching "OE Type 10"
     match: mistake.toLowerCase(),
-    description: "Rule: " + mistake,
+    description: "Non-negotiable rule: never take this trade",
   }));
 
   const [selectedSession, setSelectedSession] = useState<string>("All");
@@ -119,15 +120,15 @@ export default function Mistakes() {
         const weekTrades = trades.filter((t) => getWeekKey(new Date(t.date)) === wk);
         if (weekTrades.length === 0) return "empty";
         const violated = weekTrades.some((t) =>
-          t.mistakes?.some((m) => m.toLowerCase().includes(rule.match))
+          t.mistakes?.some((m) => m.toLowerCase() === rule.match)
         );
         return violated ? "red" : "green";
       });
       const currentMonthViolations = currentMonthTrades.filter((t) =>
-        t.mistakes?.some((m) => m.toLowerCase().includes(rule.match))
+        t.mistakes?.some((m) => m.toLowerCase() === rule.match)
       ).length;
       const currentMonthR = currentMonthTrades
-        .filter((t) => t.mistakes?.some((m) => m.toLowerCase().includes(rule.match)))
+        .filter((t) => t.mistakes?.some((m) => m.toLowerCase() === rule.match))
         .reduce((s, t) => s + (t.realisedR || 0), 0);
       return { ...rule, dots, currentMonthViolations, currentMonthR };
     });

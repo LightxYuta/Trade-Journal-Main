@@ -49,30 +49,48 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState<ActiveSection>("journal");
   const [nonNegotiableMistakes, setNonNegotiableMistakes] = useState<string[]>(settings.nonNegotiableMistakes || []);
 
-  // Loss conditions state
-  const [lossConditions, setLossConditions] = useState(() => loadLossConditions());
-  const [editingConditions, setEditingConditions] = useState(false);
-  const [conditionDraft, setConditionDraft] = useState(lossConditions);
+  // Keep local state in sync when settings load from Supabase
+  useEffect(() => {
+    setNonNegotiableMistakes(settings.nonNegotiableMistakes || []);
+  }, [settings.nonNegotiableMistakes]);
 
-  const toggleNonNegotiable = (mistake: string) => {
-    const updated = nonNegotiableMistakes.includes(mistake)
-      ? nonNegotiableMistakes.filter(m => m !== mistake)
-      : [...nonNegotiableMistakes, mistake];
-    setNonNegotiableMistakes(updated);
-    updateSettings({ nonNegotiableMistakes: updated });
-  };
+  // Toggle is applied to editValues (the draft being edited in the modal),
+  // but only saved when the user clicks Save in the modal footer.
+  // We track pending non-negotiable state separately so it doesn't
+  // fire updateSettings on every checkbox click mid-edit.
+  const [pendingNonNeg, setPendingNonNeg] = useState<string[]>([]);
 
   const openEditor = (key: SettingsKey) => {
     setEditingKey(key);
     setEditValues([...(settings[key] || [])]);
+    // Snapshot current non-negotiables into pending state when modal opens
+    if (key === 'mistakes') {
+      setPendingNonNeg([...(settings.nonNegotiableMistakes || [])]);
+    }
   };
 
-  const closeEditor = () => { setEditingKey(null); setEditValues([]); };
+  const closeEditor = () => { setEditingKey(null); setEditValues([]); setPendingNonNeg([]); };
 
   const saveEditorSettings = () => {
     if (!editingKey) return;
-    updateSettings({ [editingKey]: editValues.filter(v => v.trim()) });
+    const filtered = editValues.filter(v => v.trim());
+    // When saving mistakes, also save the non-negotiable list,
+    // pruned to only include names that still exist in the list
+    if (editingKey === 'mistakes') {
+      const validNonNeg = pendingNonNeg.filter(nn => filtered.includes(nn));
+      setNonNegotiableMistakes(validNonNeg);
+      updateSettings({ [editingKey]: filtered, nonNegotiableMistakes: validNonNeg });
+    } else {
+      updateSettings({ [editingKey]: filtered });
+    }
     closeEditor();
+  };
+
+  const togglePendingNonNeg = (mistake: string) => {
+    if (!mistake.trim()) return; // never toggle empty strings
+    setPendingNonNeg(prev =>
+      prev.includes(mistake) ? prev.filter(m => m !== mistake) : [...prev, mistake]
+    );
   };
 
   const handleTiltSave = () => {
@@ -82,6 +100,11 @@ export default function Settings() {
     setTiltSaved(true);
     setTimeout(() => setTiltSaved(false), 1200);
   };
+
+  // Loss conditions state (for Loss Tracker section)
+  const [lossConditions, setLossConditions] = useState(() => loadLossConditions());
+  const [editingConditions, setEditingConditions] = useState(false);
+  const [conditionDraft, setConditionDraft] = useState(lossConditions);
 
   useEffect(() => {
     setTiltInput(settings.tiltThreshold?.toString() ?? "2");
@@ -296,15 +319,21 @@ export default function Settings() {
                       className="flex-1 bg-transparent text-sm text-white placeholder-[#444] focus:outline-none"
                       placeholder="Enter value..." />
                   </div>
-                  {editingKey === 'mistakes' && (
-                    <label className="flex items-center gap-1 text-xs cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={nonNegotiableMistakes.includes(value)}
-                        onChange={() => toggleNonNegotiable(value)}
-                        className="accent-[#00d28a]"
-                      />
-                      <span className="text-[#00d28a] whitespace-nowrap">Non-Neg</span>
+                  {editingKey === 'mistakes' && value.trim() && (
+                    <label className="flex items-center gap-1.5 text-xs cursor-pointer flex-shrink-0">
+                      <div
+                        onClick={() => togglePendingNonNeg(value)}
+                        className={`w-8 h-4 rounded-full transition-colors cursor-pointer relative flex-shrink-0 ${
+                          pendingNonNeg.includes(value) ? 'bg-[#00d28a]' : 'bg-[#222]'
+                        }`}
+                      >
+                        <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+                          pendingNonNeg.includes(value) ? 'translate-x-4' : 'translate-x-0.5'
+                        }`} />
+                      </div>
+                      <span className={`whitespace-nowrap transition-colors ${pendingNonNeg.includes(value) ? 'text-[#00d28a]' : 'text-[#444]'}`}>
+                        Non-neg
+                      </span>
                     </label>
                   )}
                   <button onClick={() => setEditValues(editValues.filter((_, i) => i !== index))}

@@ -939,11 +939,19 @@ export default function Protocols() {
   const [draftDesc, setDraftDesc] = useState('');
   const [draftColor, setDraftColor] = useState(PROTOCOL_COLORS[0]);
   const [draftIcon, setDraftIcon] = useState(PROTOCOL_ICONS[0]);
+  // per-protocol trade counts for dashboard cards
+  const [tradeCounts, setTradeCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    loadProtocols().then(p => {
+    loadProtocols().then(async p => {
       setProtocols(p);
-      if (p.length > 0 && !selectedId) setSelectedId(p[0].id);
+      // load trade counts for each protocol for the dashboard
+      const counts: Record<string, number> = {};
+      await Promise.all(p.map(async proto => {
+        const t = await loadProtocolTrades(proto.id);
+        counts[proto.id] = t.length;
+      }));
+      setTradeCounts(counts);
       setLoading(false);
     });
   }, []);
@@ -958,7 +966,8 @@ export default function Protocols() {
     setIsCreating(true);
   };
 
-  const openEdit = (p: Protocol) => {
+  const openEdit = (p: Protocol, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setEditingProtocol(p);
     setDraftName(p.name); setDraftDesc(p.description);
     setDraftColor(p.color); setDraftIcon(p.icon);
@@ -973,16 +982,22 @@ export default function Protocols() {
     } else {
       const p = await createProtocol({ name: draftName, description: draftDesc, color: draftColor, icon: draftIcon, sortOrder: protocols.length });
       setProtocols(prev => [...prev, p]);
-      setSelectedId(p.id);
+      setTradeCounts(prev => ({ ...prev, [p.id]: 0 }));
     }
     setIsCreating(false);
   };
 
-  const handleDeleteProtocol = async (id: string) => {
+  const handleDeleteProtocol = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!confirm('Delete this protocol and all its data?')) return;
     await deleteProtocol(id);
     setProtocols(prev => prev.filter(p => p.id !== id));
-    if (selectedId === id) setSelectedId(protocols.find(p => p.id !== id)?.id || null);
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  const handleOpenProtocol = (id: string) => {
+    setSelectedId(id);
+    setActiveTab('notes');
   };
 
   if (loading) {
@@ -993,204 +1008,316 @@ export default function Protocols() {
     );
   }
 
-  return (
-    <div className="flex h-screen overflow-hidden">
-      {/* ── Left Sidebar ── */}
-      <aside className="w-60 flex-shrink-0 flex flex-col border-r border-[#111]" style={{ background: '#070707' }}>
-        <div className="px-4 pt-5 pb-4 border-b border-[#111]">
-          <div className="flex items-center justify-between">
-            <h1 className="text-sm font-semibold text-white tracking-tight">Protocols</h1>
-            <button onClick={openCreate}
-              className="w-6 h-6 rounded-lg flex items-center justify-center text-[#333] hover:text-white hover:bg-[#111] transition-colors">
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <p className="text-xs text-[#2a2a2a] mt-1">{protocols.length} protocol{protocols.length !== 1 ? 's' : ''}</p>
-        </div>
+  // ── Protocol detail view ──
+  if (selected) {
+    return (
+      <div className="min-h-screen" style={{ background: '#0a0a0a' }}>
+        <div className="max-w-4xl mx-auto px-8 py-8">
+          {/* Back button */}
+          <button
+            onClick={() => setSelectedId(null)}
+            className="flex items-center gap-2 text-xs text-[#444] hover:text-white transition-colors mb-8 group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+            All Protocols
+          </button>
 
-        <nav className="flex-1 overflow-y-auto py-2" style={{ scrollbarWidth: 'none' }}>
-          {protocols.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <p className="text-xs text-[#2a2a2a] mb-3">No protocols yet</p>
-              <button onClick={openCreate}
-                className="text-xs text-[#333] hover:text-white transition-colors underline underline-offset-2">
-                Create first protocol
+          {/* Protocol Header */}
+          <div className="mb-8">
+            <div className="flex items-start justify-between mb-1">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{selected.icon}</span>
+                <div>
+                  <h1 className="text-2xl font-bold text-white tracking-tight">{selected.name}</h1>
+                  {selected.description && <p className="text-sm text-[#444] mt-0.5">{selected.description}</p>}
+                </div>
+              </div>
+              <button onClick={(e) => openEdit(selected, e)}
+                className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-[#444] hover:text-white transition-colors flex items-center gap-1.5">
+                <Edit2 className="w-3 h-3" /> Edit
               </button>
             </div>
-          ) : protocols.map(p => (
-            <button key={p.id}
-              onClick={() => { setSelectedId(p.id); setActiveTab('notes'); }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors relative group/nav ${selectedId === p.id ? 'bg-[#0f0f0f]' : 'hover:bg-[#0c0c0c]'}`}>
-              {selectedId === p.id && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full" style={{ background: p.color }} />
-              )}
-              <span className="text-base flex-shrink-0">{p.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className={`text-xs font-medium truncate ${selectedId === p.id ? 'text-white' : 'text-[#444]'}`}>{p.name}</p>
-                {p.description && <p className="text-xs text-[#222] truncate mt-0.5">{p.description}</p>}
-              </div>
-              <div className="opacity-0 group-hover/nav:opacity-100 transition-opacity flex gap-0.5">
-                <button onClick={e => { e.stopPropagation(); openEdit(p); }}
-                  className="w-5 h-5 rounded flex items-center justify-center text-[#333] hover:text-[#666]">
-                  <Edit2 className="w-2.5 h-2.5" />
-                </button>
-                <button onClick={e => { e.stopPropagation(); handleDeleteProtocol(p.id); }}
-                  className="w-5 h-5 rounded flex items-center justify-center text-[#333] hover:text-[#ff4f4f]">
-                  <Trash2 className="w-2.5 h-2.5" />
-                </button>
-              </div>
-            </button>
-          ))}
-        </nav>
-
-        {/* Bottom hint */}
-        <div className="px-4 py-3 border-t border-[#111]">
-          <p className="text-xs text-[#1e1e1e]">Each protocol has notes + a data collection tab</p>
-        </div>
-      </aside>
-
-      {/* ── Main Content ── */}
-      <main className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.06) transparent' }}>
-        {!selected ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4">
-            <div className="text-4xl mb-2">📋</div>
-            <p className="text-white font-semibold">No protocol selected</p>
-            <p className="text-[#333] text-sm text-center max-w-xs">Create a protocol to document your trading strategies and collect isolated performance data</p>
-            <button onClick={openCreate}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors flex items-center gap-2">
-              <Plus className="w-4 h-4" /> New Protocol
-            </button>
+            <div className="mt-4 h-px" style={{ background: `linear-gradient(90deg, ${selected.color}60, transparent)` }} />
           </div>
-        ) : (
-          <div className="max-w-4xl mx-auto px-8 py-8">
-            {/* Protocol Header */}
-            <div className="mb-8">
-              <div className="flex items-start justify-between mb-1">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{selected.icon}</span>
-                  <div>
-                    <h1 className="text-2xl font-bold text-white tracking-tight">{selected.name}</h1>
-                    {selected.description && <p className="text-sm text-[#444] mt-0.5">{selected.description}</p>}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-6 border-b border-[#111] pb-0">
+            {[
+              { id: 'notes' as const, label: 'Notes', icon: <FileText className="w-3.5 h-3.5" /> },
+              { id: 'data' as const, label: 'Data Collection', icon: <BarChart2 className="w-3.5 h-3.5" /> },
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors -mb-px ${activeTab === tab.id
+                  ? 'border-[#00d28a] text-white'
+                  : 'border-transparent text-[#444] hover:text-[#666]'
+                }`}>
+                {tab.icon}{tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          {activeTab === 'notes'
+            ? <ProtocolNotesEditor key={selected.id} protocol={selected} />
+            : <ProtocolDataTab key={selected.id} protocol={selected} />
+          }
+        </div>
+
+        {/* Create/Edit modal */}
+        {isCreating && <ProtocolModal
+          editingProtocol={editingProtocol}
+          draftName={draftName} setDraftName={setDraftName}
+          draftDesc={draftDesc} setDraftDesc={setDraftDesc}
+          draftColor={draftColor} setDraftColor={setDraftColor}
+          draftIcon={draftIcon} setDraftIcon={setDraftIcon}
+          onSave={handleSaveProtocol}
+          onClose={() => setIsCreating(false)}
+        />}
+      </div>
+    );
+  }
+
+  // ── Dashboard view ──
+  return (
+    <div className="min-h-screen p-8" style={{ background: '#0a0a0a' }}>
+      {/* Header */}
+      <div className="flex items-end justify-between mb-10">
+        <div>
+          <p className="text-xs text-[#333] uppercase tracking-widest mb-2 font-medium">Trading System</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Protocols</h1>
+          <p className="text-sm text-[#444] mt-1.5">
+            {protocols.length > 0
+              ? `${protocols.length} protocol${protocols.length !== 1 ? 's' : ''} · click to open`
+              : 'Document your trading rules and track each model separately'}
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors"
+        >
+          <Plus className="w-4 h-4" /> New Protocol
+        </button>
+      </div>
+
+      {/* Empty state */}
+      {protocols.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-32 gap-4">
+          <div className="text-6xl mb-2">📋</div>
+          <p className="text-white font-semibold text-lg">No protocols yet</p>
+          <p className="text-[#333] text-sm text-center max-w-sm leading-relaxed">
+            Create protocols to document your setups — Trapped OF, Overextension, London Session etc. Each one gets its own notes and isolated data collection.
+          </p>
+          <button onClick={openCreate}
+            className="mt-4 px-6 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Create First Protocol
+          </button>
+        </div>
+      ) : (
+        /* ── Protocol Cards Grid ── */
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+          {protocols.map((p, idx) => {
+            const count = tradeCounts[p.id] ?? 0;
+            // staggered animation delay
+            const delay = `${idx * 60}ms`;
+            return (
+              <button
+                key={p.id}
+                onClick={() => handleOpenProtocol(p.id)}
+                className="group relative text-left rounded-2xl border border-[#1a1a1a] overflow-hidden transition-all duration-200 hover:border-[#2a2a2a] hover:-translate-y-0.5"
+                style={{
+                  background: '#0d0d0d',
+                  boxShadow: '0 0 0 0 transparent',
+                  animationDelay: delay,
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 32px ${p.color}18`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 0 transparent';
+                }}
+              >
+                {/* Color top bar */}
+                <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, ${p.color}, ${p.color}00)` }} />
+
+                <div className="p-6">
+                  {/* Top row: icon + actions */}
+                  <div className="flex items-start justify-between mb-5">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+                      style={{ background: `${p.color}12`, border: `1px solid ${p.color}20` }}
+                    >
+                      {p.icon}
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={e => openEdit(p, e)}
+                        className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-white hover:border-[#333] transition-colors"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={e => handleDeleteProtocol(p.id, e)}
+                        className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-[#ff4f4f] hover:border-[#2e1010] transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Name + description */}
+                  <h3 className="text-sm font-semibold text-white mb-1 leading-tight">{p.name}</h3>
+                  {p.description
+                    ? <p className="text-xs text-[#444] leading-relaxed mb-5">{p.description}</p>
+                    : <p className="text-xs text-[#2a2a2a] leading-relaxed mb-5">No description</p>
+                  }
+
+                  {/* Footer stats */}
+                  <div className="flex items-center justify-between pt-4 border-t border-[#111]">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <BarChart2 className="w-3 h-3" style={{ color: p.color, opacity: 0.7 }} />
+                        <span className="text-xs text-[#444]">
+                          {count > 0 ? `${count} data trade${count !== 1 ? 's' : ''}` : 'No data yet'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <FileText className="w-3 h-3 text-[#333]" />
+                        <span className="text-xs text-[#333]">Notes</span>
+                      </div>
+                    </div>
+                    {/* Open arrow */}
+                    <div
+                      className="w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 group-hover:translate-x-0.5"
+                      style={{ color: p.color, opacity: 0.6 }}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
                   </div>
                 </div>
-                <button onClick={() => openEdit(selected)}
-                  className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-[#444] hover:text-white transition-colors flex items-center gap-1.5">
-                  <Edit2 className="w-3 h-3" /> Edit
-                </button>
-              </div>
-              {/* Color accent line */}
-              <div className="mt-4 h-px" style={{ background: `linear-gradient(90deg, ${selected.color}40, transparent)` }} />
-            </div>
+              </button>
+            );
+          })}
 
-            {/* Tabs */}
-            <div className="flex gap-1 mb-6 border-b border-[#111] pb-0">
-              {[
-                { id: 'notes' as const, label: 'Notes', icon: <FileText className="w-3.5 h-3.5" /> },
-                { id: 'data' as const, label: 'Data Collection', icon: <BarChart2 className="w-3.5 h-3.5" /> },
-              ].map(tab => (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors -mb-px ${activeTab === tab.id
-                    ? 'border-[#00d28a] text-white'
-                    : 'border-transparent text-[#444] hover:text-[#666]'
-                  }`}>
-                  {tab.icon}
-                  {tab.label}
+          {/* Add new card */}
+          <button
+            onClick={openCreate}
+            className="group relative text-left rounded-2xl border border-dashed border-[#1a1a1a] overflow-hidden transition-all duration-200 hover:border-[#2a2a2a] hover:bg-[#0d0d0d]"
+            style={{ minHeight: '180px' }}
+          >
+            <div className="h-full flex flex-col items-center justify-center gap-2 p-6 text-[#2a2a2a] group-hover:text-[#444] transition-colors">
+              <div className="w-10 h-10 rounded-xl border border-dashed border-[#1e1e1e] group-hover:border-[#2a2a2a] flex items-center justify-center transition-colors">
+                <Plus className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-medium">New Protocol</p>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Create/Edit modal */}
+      {isCreating && <ProtocolModal
+        editingProtocol={editingProtocol}
+        draftName={draftName} setDraftName={setDraftName}
+        draftDesc={draftDesc} setDraftDesc={setDraftDesc}
+        draftColor={draftColor} setDraftColor={setDraftColor}
+        draftIcon={draftIcon} setDraftIcon={setDraftIcon}
+        onSave={handleSaveProtocol}
+        onClose={() => setIsCreating(false)}
+      />}
+    </div>
+  );
+}
+
+// ─── Protocol Modal (extracted to avoid duplication) ─────────────────────────
+
+function ProtocolModal({
+  editingProtocol, draftName, setDraftName, draftDesc, setDraftDesc,
+  draftColor, setDraftColor, draftIcon, setDraftIcon, onSave, onClose,
+}: {
+  editingProtocol: Protocol | null;
+  draftName: string; setDraftName: (v: string) => void;
+  draftDesc: string; setDraftDesc: (v: string) => void;
+  draftColor: string; setDraftColor: (v: string) => void;
+  draftIcon: string; setDraftIcon: (v: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-md rounded-2xl border border-[#1e1e1e] bg-[#0a0a0a] overflow-hidden"
+        style={{ boxShadow: '0 25px 80px rgba(0,0,0,0.9)' }}>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[#1a1a1a]">
+          <h2 className="text-sm font-semibold text-white">{editingProtocol ? 'Edit Protocol' : 'New Protocol'}</h2>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-white transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div className="p-6 space-y-5">
+          {/* Icon picker */}
+          <div>
+            <label className="block text-xs text-[#444] mb-2">Icon</label>
+            <div className="flex flex-wrap gap-1.5">
+              {PROTOCOL_ICONS.map(icon => (
+                <button key={icon} type="button" onClick={() => setDraftIcon(icon)}
+                  className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-colors ${draftIcon === icon ? 'bg-[#1a1a1a] ring-1 ring-[#333]' : 'hover:bg-[#111]'}`}>
+                  {icon}
                 </button>
               ))}
             </div>
-
-            {/* Tab content */}
-            {activeTab === 'notes' ? (
-              <ProtocolNotesEditor key={selected.id} protocol={selected} />
-            ) : (
-              <ProtocolDataTab key={selected.id} protocol={selected} />
-            )}
           </div>
-        )}
-      </main>
 
-      {/* ── Create/Edit Protocol Modal ── */}
-      {isCreating && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={e => e.target === e.currentTarget && setIsCreating(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-[#1e1e1e] bg-[#0a0a0a] overflow-hidden"
-            style={{ boxShadow: '0 25px 80px rgba(0,0,0,0.9)' }}>
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#1a1a1a]">
-              <h2 className="text-sm font-semibold text-white">{editingProtocol ? 'Edit Protocol' : 'New Protocol'}</h2>
-              <button onClick={() => setIsCreating(false)} className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-white transition-colors">
-                <X className="w-3.5 h-3.5" />
-              </button>
+          {/* Color picker */}
+          <div>
+            <label className="block text-xs text-[#444] mb-2">Color</label>
+            <div className="flex gap-2">
+              {PROTOCOL_COLORS.map(c => (
+                <button key={c} type="button" onClick={() => setDraftColor(c)}
+                  className={`w-6 h-6 rounded-full transition-transform ${draftColor === c ? 'scale-125 ring-2 ring-white/20' : 'hover:scale-110'}`}
+                  style={{ background: c }} />
+              ))}
             </div>
-            <div className="p-6 space-y-5">
-              {/* Icon picker */}
-              <div>
-                <label className="block text-xs text-[#444] mb-2">Icon</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {PROTOCOL_ICONS.map(icon => (
-                    <button key={icon} type="button" onClick={() => setDraftIcon(icon)}
-                      className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-colors ${draftIcon === icon ? 'bg-[#1a1a1a] ring-1 ring-[#333]' : 'hover:bg-[#111]'}`}>
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          </div>
 
-              {/* Color picker */}
-              <div>
-                <label className="block text-xs text-[#444] mb-2">Color</label>
-                <div className="flex gap-2">
-                  {PROTOCOL_COLORS.map(c => (
-                    <button key={c} type="button" onClick={() => setDraftColor(c)}
-                      className={`w-6 h-6 rounded-full transition-transform ${draftColor === c ? 'scale-125 ring-2 ring-white/20' : 'hover:scale-110'}`}
-                      style={{ background: c }} />
-                  ))}
-                </div>
-              </div>
+          {/* Name */}
+          <div>
+            <label className="block text-xs text-[#444] mb-1.5">Protocol Name *</label>
+            <input value={draftName} onChange={e => setDraftName(e.target.value)}
+              placeholder="e.g. Trapped Orderflow Protocol"
+              className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]"
+              autoFocus onKeyDown={e => e.key === 'Enter' && onSave()} />
+          </div>
 
-              {/* Name */}
-              <div>
-                <label className="block text-xs text-[#444] mb-1.5">Protocol Name *</label>
-                <input value={draftName} onChange={e => setDraftName(e.target.value)}
-                  placeholder="e.g. Trapped Orderflow Protocol"
-                  className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]"
-                  autoFocus
-                  onKeyDown={e => e.key === 'Enter' && handleSaveProtocol()}
-                />
-              </div>
+          {/* Description */}
+          <div>
+            <label className="block text-xs text-[#444] mb-1.5">Description <span className="text-[#2a2a2a]">(optional)</span></label>
+            <input value={draftDesc} onChange={e => setDraftDesc(e.target.value)}
+              placeholder="Brief description of this protocol"
+              className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]" />
+          </div>
 
-              {/* Description */}
-              <div>
-                <label className="block text-xs text-[#444] mb-1.5">Description <span className="text-[#2a2a2a]">(optional)</span></label>
-                <input value={draftDesc} onChange={e => setDraftDesc(e.target.value)}
-                  placeholder="Brief description of this protocol"
-                  className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]"
-                />
-              </div>
-
-              {/* Preview */}
-              <div className="rounded-xl border border-[#1e1e1e] bg-[#080808] px-4 py-3 flex items-center gap-3">
-                <span className="text-2xl">{draftIcon}</span>
-                <div>
-                  <p className="text-sm font-semibold text-white">{draftName || 'Protocol name'}</p>
-                  {draftDesc && <p className="text-xs text-[#444] mt-0.5">{draftDesc}</p>}
-                </div>
-                <div className="ml-auto w-2 h-2 rounded-full" style={{ background: draftColor }} />
-              </div>
-
-              <div className="flex gap-2">
-                <button onClick={handleSaveProtocol} disabled={!draftName.trim()}
-                  className="flex-1 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                  {editingProtocol ? 'Save Changes' : 'Create Protocol'}
-                </button>
-                <button onClick={() => setIsCreating(false)}
-                  className="flex-1 py-3 rounded-xl border border-[#1e1e1e] text-sm text-[#555] hover:text-white transition-colors">
-                  Cancel
-                </button>
-              </div>
+          {/* Preview */}
+          <div className="rounded-xl border border-[#1e1e1e] bg-[#080808] px-4 py-3 flex items-center gap-3">
+            <span className="text-2xl">{draftIcon}</span>
+            <div>
+              <p className="text-sm font-semibold text-white">{draftName || 'Protocol name'}</p>
+              {draftDesc && <p className="text-xs text-[#444] mt-0.5">{draftDesc}</p>}
             </div>
+            <div className="ml-auto w-2 h-2 rounded-full" style={{ background: draftColor }} />
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={onSave} disabled={!draftName.trim()}
+              className="flex-1 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              {editingProtocol ? 'Save Changes' : 'Create Protocol'}
+            </button>
+            <button onClick={onClose}
+              className="flex-1 py-3 rounded-xl border border-[#1e1e1e] text-sm text-[#555] hover:text-white transition-colors">
+              Cancel
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
