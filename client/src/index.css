@@ -21,6 +21,33 @@
   --accent-green: #00d28a;
   --accent-red: #ff4f4f;
   --accent-gold: #ffd76e;
+
+  /* ── Theme tokens (overridden by ThemeContext) ── */
+  --t-win:          #00d28a;
+  --t-win-bg:       rgba(0,210,138,0.08);
+  --t-win-border:   rgba(0,210,138,0.18);
+
+  --t-loss:         #ff4f4f;
+  --t-loss-bg:      rgba(255,79,79,0.08);
+  --t-loss-border:  rgba(255,79,79,0.18);
+
+  --t-be:           #ffd76e;
+  --t-be-bg:        rgba(255,215,110,0.08);
+  --t-be-border:    rgba(255,215,110,0.15);
+
+  --t-accent:       #00d28a;
+  --t-accent-bg:    rgba(0,210,138,0.08);
+  --t-accent-border:rgba(0,210,138,0.15);
+
+  --t-gold:         #ffd76e;
+  --t-gold-bg:      rgba(255,215,110,0.08);
+  --t-gold-border:  rgba(255,215,110,0.15);
+
+  --t-chart-up:     #00d28a;
+  --t-chart-down:   #ff4f4f;
+  --t-chart-line:   #00d28a;
+  --t-nav-active:   #00d28a;
+  /* ─────────────────────────────────────────────── */
   
   --radius-lg: 18px;
   --radius-xl: 22px;
@@ -380,21 +407,21 @@
 }
 
 .badge-outcome.win {
-  background: rgba(0, 210, 138, 0.14);
-  color: var(--accent-green);
-  border: 1px solid rgba(0, 210, 138, 0.8);
+  background: var(--t-win-bg);
+  color: var(--t-win);
+  border: 1px solid var(--t-win-border);
 }
 
 .badge-outcome.loss {
-  background: rgba(255, 79, 79, 0.14);
-  color: var(--accent-red);
-  border: 1px solid rgba(255, 79, 79, 0.8);
+  background: var(--t-loss-bg);
+  color: var(--t-loss);
+  border: 1px solid var(--t-loss-border);
 }
 
 .badge-outcome.be {
-  background: rgba(255, 215, 110, 0.16);
-  color: var(--accent-gold);
-  border: 1px solid rgba(255, 215, 110, 0.8);
+  background: var(--t-be-bg);
+  color: var(--t-be);
+  border: 1px solid var(--t-be-border);
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -413,3 +440,69 @@ select option:checked {
   background: rgba(255, 215, 110, 0.18) !important;
   color: #ffd76e !important;
 }
+
+/* ============================================================
+   MONOCHROME THEME OVERRIDES
+   These override Tailwind's arbitrary color utilities app-wide
+   without touching any component code.
+   ============================================================ */
+
+/* Win color (#00d28a) → soft white */
+[data-theme="mono"] .text-\[\#00d28a\]  { color: #e8e8e8 !important; }
+[data-theme="mono"] .bg-\[\#00d28a\]    { background-color: rgba(232,232,232,0.15) !important; }
+[data-theme="mono"] .border-\[\#00d28a\]{ border-color: rgba(232,232,232,0.25) !important; }
+
+/* Loss color (#ff4f4f) → muted rose */
+[data-theme="mono"] .text-\[\#ff4f4f\]  { color: #c0786a !important; }
+[data-theme="mono"] .bg-\[\#ff4f4f\]    { background-color: rgba(192,120,106,0.15) !important; }
+[data-theme="mono"] .border-\[\#ff4f4f\]{ border-color: rgba(192,120,106,0.25) !important; }
+
+/* Gold/BE color (#ffd76e) → silver */
+[data-theme="mono"] .text-\[\#ffd76e\]  { color: #aaaaaa !important; }
+[data-theme="mono"] .bg-\[\#ffd76e\]    { background-color: rgba(170,170,170,0.12) !important; }
+[data-theme="mono"] .border-\[\#ffd76e\]{ border-color: rgba(170,170,170,0.2) !important; }
+
+/* Win-adjacent dark backgrounds (#0a2e1a, #0a140a, #0f2e0f, #0a1a0a, #0a180a) */
+[data-theme="mono"] .bg-\[\#0a2e1a\],
+[data-theme="mono"] .bg-\[\#0a140a\],
+[data-theme="mono"] .bg-\[\#0f2e0f\],
+[data-theme="mono"] .bg-\[\#0a1a0a\],
+[data-theme="mono"] .bg-\[\#0a180a\] { background-color: rgba(232,232,232,0.05) !important; }
+
+/* Loss-adjacent dark backgrounds (#2e0a0a, #140a0a, #2e0f0f, #1a0808, #1a0505) */
+[data-theme="mono"] .bg-\[\#2e0a0a\],
+[data-theme="mono"] .bg-\[\#140a0a\],
+[data-theme="mono"] .bg-\[\#2e0f0f\],
+[data-theme="mono"] .bg-\[\#1a0808\],
+[data-theme="mono"] .bg-\[\#1a0505\] { background-color: rgba(192,120,106,0.07) !important; }
+
+/* Gold-adjacent dark backgrounds (#1a1500) */
+[data-theme="mono"] .bg-\[\#1a1500\] { background-color: rgba(170,170,170,0.05) !important; }
+
+/* Win border variants (#1e2e1e, #1f3e1f) */
+[data-theme="mono"] .border-\[\#1e2e1e\],
+[data-theme="mono"] .border-\[\#1f3e1f\] { border-color: rgba(232,232,232,0.1) !important; }
+
+/* Loss border variants (#3e1f1f, #2e1e1e, #2e1010) */
+[data-theme="mono"] .border-\[\#3e1f1f\],
+[data-theme="mono"] .border-\[\#2e1e1e\],
+[data-theme="mono"] .border-\[\#2e1010\] { border-color: rgba(192,120,106,0.2) !important; }
+
+/* Specific green text variants (#4dba77, #00ff9d) */
+[data-theme="mono"] .text-\[\#4dba77\]  { color: #cccccc !important; }
+[data-theme="mono"] .text-\[\#00ff9d\]  { color: #e8e8e8 !important; }
+
+/* Inline style overrides — these handle style={{ color: '#00d28a' }} etc.
+   We target the known parent containers to catch chart labels, stat values etc. */
+[data-theme="mono"] [style*="color: rgb(0, 210, 138)"],
+[data-theme="mono"] [style*="color:#00d28a"],
+[data-theme="mono"] [style*='color: "#00d28a"'] { color: #e8e8e8 !important; }
+
+[data-theme="mono"] [style*="color: rgb(255, 79, 79)"],
+[data-theme="mono"] [style*="color:#ff4f4f"] { color: #c0786a !important; }
+
+[data-theme="mono"] [style*="color: rgb(255, 215, 110)"],
+[data-theme="mono"] [style*="color:#ffd76e"] { color: #aaaaaa !important; }
+
+/* Sidebar accent bar */
+[data-theme="mono"] .nav-active-bar { background: #ffffff !important; }

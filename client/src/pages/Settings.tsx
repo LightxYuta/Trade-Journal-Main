@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Plus, Trash2, AlertTriangle, ChevronRight } from "lucide-react";
 import { useTradeContext } from "@/contexts/TradeContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type SettingsKey = "accounts" | "models" | "sessions" | "entryTFs" | "setupGrades" | "keyLevels" | "mistakes";
 
@@ -38,10 +39,11 @@ function saveLossConditions(conditions: typeof DEFAULT_LOSS_CONDITIONS) {
   } catch {}
 }
 
-type ActiveSection = "journal" | "lossTracker" | "danger" | null;
+type ActiveSection = "journal" | "appearance" | "lossTracker" | "danger" | null;
 
 export default function Settings() {
   const { settings, updateSettings, resetSettings, clearAllTrades, fullReset } = useTradeContext();
+  const { theme, toggleTheme } = useTheme();
   const [editingKey, setEditingKey] = useState<SettingsKey | null>(null);
   const [editValues, setEditValues] = useState<string[]>([]);
   const [tiltInput, setTiltInput] = useState(settings.tiltThreshold?.toString() ?? "2");
@@ -119,6 +121,7 @@ export default function Settings() {
 
   const sections = [
     { id: "journal", label: "Journal Settings" },
+    { id: "appearance", label: "Appearance" },
     { id: "lossTracker", label: "Loss Tracker" },
     { id: "danger", label: "Data Management" },
   ] as const;
@@ -185,6 +188,125 @@ export default function Settings() {
                   {tiltSaved ? "✓ Saved" : "Save"}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Appearance ── */}
+        {activeSection === "appearance" && (
+          <div>
+            <h1 className="text-xl font-semibold mb-1">Appearance</h1>
+            <p className="text-sm text-[#666] mb-8">Customise how your journal looks</p>
+
+            <div className="rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] p-5 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white mb-1">Colour Theme</p>
+                  <p className="text-xs text-[#555] leading-relaxed max-w-xs">
+                    {theme === 'color'
+                      ? 'Default — green for wins, red for losses, gold for BE'
+                      : 'Monochrome — white/silver for wins, muted rose for losses'
+                    }
+                  </p>
+                </div>
+
+                {/* Toggle pill */}
+                <button
+                  onClick={toggleTheme}
+                  className="flex-shrink-0 relative rounded-xl overflow-hidden transition-all duration-300"
+                  style={{
+                    width: '160px',
+                    height: '80px',
+                    background: theme === 'color' ? '#080808' : '#111',
+                    border: `1px solid ${theme === 'color' ? '#1e1e1e' : '#2a2a2a'}`,
+                  }}
+                >
+                  {/* Color side */}
+                  <div className={`absolute inset-0 flex flex-col items-center justify-center gap-1 transition-opacity duration-300 ${theme === 'color' ? 'opacity-100' : 'opacity-0'}`}>
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#00d28a' }} />
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#ff4f4f' }} />
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#ffd76e' }} />
+                    </div>
+                    <span className="text-xs font-medium text-white">Colour</span>
+                    <span className="text-[10px] text-[#555]">currently active</span>
+                  </div>
+
+                  {/* Mono side */}
+                  <div className={`absolute inset-0 flex flex-col items-center justify-center gap-1 transition-opacity duration-300 ${theme === 'mono' ? 'opacity-100' : 'opacity-0'}`}>
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-[#e8e8e8]" />
+                      <div className="w-3 h-3 rounded-full" style={{ background: '#c0786a' }} />
+                      <div className="w-3 h-3 rounded-full bg-[#888]" />
+                    </div>
+                    <span className="text-xs font-medium text-white">Monochrome</span>
+                    <span className="text-[10px] text-[#555]">currently active</span>
+                  </div>
+
+                  {/* Active glow */}
+                  {theme === 'mono' && (
+                    <div className="absolute inset-0 rounded-xl" style={{ boxShadow: 'inset 0 0 20px rgba(255,255,255,0.03)' }} />
+                  )}
+                </button>
+              </div>
+
+              {/* Side-by-side preview */}
+              <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-[#111]">
+                {/* Color preview */}
+                <button
+                  onClick={() => theme !== 'color' && toggleTheme()}
+                  className={`rounded-xl p-3 transition-all ${theme === 'color' ? 'ring-1 ring-[#00d28a]' : 'opacity-50 hover:opacity-75'}`}
+                  style={{ background: '#080808', border: '1px solid #1a1a1a' }}
+                >
+                  <p className="text-xs text-[#555] mb-2 text-left">Colour</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#666]">Win</span>
+                      <span className="text-xs font-mono font-semibold" style={{ color: '#00d28a' }}>+2.50R</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#666]">Loss</span>
+                      <span className="text-xs font-mono font-semibold" style={{ color: '#ff4f4f' }}>-1.00R</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#666]">BE</span>
+                      <span className="text-xs font-mono font-semibold" style={{ color: '#ffd76e' }}>0.00R</span>
+                    </div>
+                  </div>
+                  {theme === 'color' && <p className="text-[10px] text-[#00d28a] mt-2 text-left">✓ Active</p>}
+                </button>
+
+                {/* Mono preview */}
+                <button
+                  onClick={() => theme !== 'mono' && toggleTheme()}
+                  className={`rounded-xl p-3 transition-all ${theme === 'mono' ? 'ring-1 ring-[#555]' : 'opacity-50 hover:opacity-75'}`}
+                  style={{ background: '#080808', border: '1px solid #1a1a1a' }}
+                >
+                  <p className="text-xs text-[#555] mb-2 text-left">Monochrome</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#666]">Win</span>
+                      <span className="text-xs font-mono font-semibold text-[#e8e8e8]">+2.50R</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#666]">Loss</span>
+                      <span className="text-xs font-mono font-semibold" style={{ color: '#c0786a' }}>-1.00R</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-[#666]">BE</span>
+                      <span className="text-xs font-mono font-semibold text-[#888]">0.00R</span>
+                    </div>
+                  </div>
+                  {theme === 'mono' && <p className="text-[10px] text-[#888] mt-2 text-left">✓ Active</p>}
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] px-5 py-4">
+              <p className="text-xs text-[#444] font-medium mb-1">About monochrome mode</p>
+              <p className="text-xs text-[#555] leading-relaxed">
+                Wins show in white/silver. Losses use a desaturated rose tone — enough to distinguish critical signals like costliest mistakes without the intensity of full red. All charts, badges, and stat cards adapt automatically.
+              </p>
             </div>
           </div>
         )}

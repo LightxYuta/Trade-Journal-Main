@@ -139,7 +139,7 @@ function BlockEditor({
             onChange={e => onChange({ ...block, content: e.target.value })}
             placeholder="Heading 1"
             className={`${textClass} text-2xl font-bold tracking-tight`}
-            style={{ fontFamily: "'JetBrains Mono', monospace", minHeight: '40px' }}
+            style={{ minHeight: '40px' }}
             rows={1} />
         );
       case 'heading2':
@@ -174,7 +174,7 @@ function BlockEditor({
           <div className="space-y-1">
             {(block.content || '').split('\n').map((line, i, arr) => (
               <div key={i} className="flex items-start gap-2">
-                <span className="text-[#00d28a] mt-1 flex-shrink-0" style={{ fontSize: '8px' }}>●</span>
+                <span className="mt-1 flex-shrink-0" style={{ fontSize: '8px', color: 'var(--t-accent)' }}>●</span>
                 <input
                   value={line}
                   onChange={e => {
@@ -247,7 +247,7 @@ function BlockEditor({
             <textarea ref={textareaRef} value={block.content}
               onChange={e => onChange({ ...block, content: e.target.value })}
               placeholder="Write a callout note..."
-              className={`${textClass} text-sm text-[#ffd76e]`}
+              className={`${textClass} text-sm`} style={{ color: 'var(--t-gold)' }}
               style={{ minHeight: '28px' }}
               rows={1} />
           </div>
@@ -493,7 +493,7 @@ function ProtocolNotesEditor({ protocol }: { protocol: Protocol }) {
     <div className="relative">
       {/* Save indicator */}
       <div className={`absolute top-0 right-0 flex items-center gap-1.5 text-xs transition-opacity ${saving || saved ? 'opacity-100' : 'opacity-0'}`}>
-        {saving ? <span className="text-[#444]">Saving...</span> : <span className="text-[#00d28a] flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Saved</span>}
+        {saving ? <span className="text-[#444]">Saving...</span> : <span className="flex items-center gap-1" style={{ color: 'var(--t-accent)' }}><CheckCircle2 className="w-3 h-3" /> Saved</span>}
       </div>
 
       <div className="pl-12 pr-8 py-2 space-y-1">
@@ -613,7 +613,7 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
 
   if (loading) return <div className="text-[#333] text-sm py-12 text-center">Loading trades...</div>;
 
-  const confidenceColor = stats?.confidence === 'high' ? '#00d28a' : stats?.confidence === 'medium' ? '#ffd76e' : '#ff4f4f';
+  const confidenceColor = stats?.confidence === 'high' ? 'var(--t-win)' : stats?.confidence === 'medium' ? 'var(--t-gold)' : 'var(--t-loss)';
   const confidenceLabel = stats?.confidence === 'high' ? 'High Confidence (100+ trades)' : stats?.confidence === 'medium' ? 'Medium Confidence (30–99 trades)' : 'Low Confidence (<30 trades)';
 
   return (
@@ -631,12 +631,12 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
           <div className="grid grid-cols-7 gap-3">
             {[
               { label: 'Trades', value: stats.n, color: '#fff' },
-              { label: 'Win Rate', value: `${stats.winRate.toFixed(1)}%`, color: stats.winRate >= 50 ? '#00d28a' : '#ff4f4f' },
-              { label: 'Total R', value: `${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`, color: stats.totalR >= 0 ? '#00d28a' : '#ff4f4f' },
-              { label: 'Avg R', value: `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`, color: stats.avgR >= 0 ? '#00d28a' : '#ff4f4f' },
-              { label: 'Avg Win', value: `+${stats.avgWin.toFixed(2)}R`, color: '#00d28a' },
-              { label: 'Avg Loss', value: `${stats.avgLoss.toFixed(2)}R`, color: '#ff4f4f' },
-              { label: 'Profit Factor', value: isFinite(stats.pf) ? stats.pf.toFixed(2) : '∞', color: stats.pf >= 1.5 ? '#00d28a' : stats.pf >= 1 ? '#ffd76e' : '#ff4f4f' },
+              { label: 'Win Rate', value: `${stats.winRate.toFixed(1)}%`, color: stats.winRate >= 50 ? 'var(--t-win)' : 'var(--t-loss)' },
+              { label: 'Total R', value: `${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`, color: stats.totalR >= 0 ? 'var(--t-win)' : 'var(--t-loss)' },
+              { label: 'Avg R', value: `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`, color: stats.avgR >= 0 ? 'var(--t-win)' : 'var(--t-loss)' },
+              { label: 'Avg Win', value: `+${stats.avgWin.toFixed(2)}R`, color: 'var(--t-win)' },
+              { label: 'Avg Loss', value: `${stats.avgLoss.toFixed(2)}R`, color: 'var(--t-loss)' },
+              { label: 'Profit Factor', value: isFinite(stats.pf) ? stats.pf.toFixed(2) : '∞', color: stats.pf >= 1.5 ? 'var(--t-win)' : stats.pf >= 1 ? 'var(--t-gold)' : 'var(--t-loss)' },
             ].map(s => (
               <div key={s.label} className="text-center">
                 <p className="text-xs text-[#333] mb-1">{s.label}</p>
@@ -654,7 +654,7 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
             <div className="h-1 rounded-full bg-[#111] overflow-hidden">
               <div className="h-full rounded-full transition-all duration-500" style={{
                 width: `${Math.min(100, (stats.n / 100) * 100)}%`,
-                background: `linear-gradient(90deg, ${stats.confidence === 'low' ? '#ff4f4f' : stats.confidence === 'medium' ? '#ffd76e' : '#00d28a'}, ${confidenceColor})`
+                background: `linear-gradient(90deg, ${stats.confidence === 'low' ? 'var(--t-loss)' : stats.confidence === 'medium' ? 'var(--t-gold)' : 'var(--t-win)'}, ${confidenceColor})`
               }} />
             </div>
           </div>
@@ -671,7 +671,7 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
                   return (
                     <div key={regime} className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-[#1e1e1e] bg-[#080808]">
                       <span className="text-xs text-[#555]">{regime}</span>
-                      <span className="text-xs font-mono" style={{ color: rwr >= 50 ? '#00d28a' : '#ff4f4f' }}>{rwr.toFixed(0)}%</span>
+                      <span className="text-xs font-mono" style={{ color: rwr >= 50 ? 'var(--t-win)' : 'var(--t-loss)' }}>{rwr.toFixed(0)}%</span>
                       <span className="text-xs text-[#333]">({rt.length})</span>
                     </div>
                   );
@@ -721,10 +721,13 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
                       <td className="px-4 py-3 font-semibold text-white text-xs">{t.symbol}</td>
                       <td className="px-4 py-3 text-xs text-[#555]">{t.position}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-sm font-semibold font-mono ${t.realisedR > 0 ? 'text-[#00d28a]' : t.realisedR < 0 ? 'text-[#ff4f4f]' : 'text-[#888]'}`}>
+                        <span className={`text-sm font-semibold font-mono`} style={{ color: t.realisedR > 0 ? 'var(--t-win)' : t.realisedR < 0 ? 'var(--t-loss)' : '#888' }}>
                           {formatR(t.realisedR)}
                         </span>
-                        <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${outcome === 'Win' ? 'bg-[#0a2e1a] text-[#00d28a]' : outcome === 'Loss' ? 'bg-[#2e0a0a] text-[#ff4f4f]' : 'bg-[#1a1500] text-[#ffd76e]'}`}>
+                        <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium`} style={{
+                          background: outcome === 'Win' ? 'var(--t-win-bg)' : outcome === 'Loss' ? 'var(--t-loss-bg)' : 'var(--t-be-bg)',
+                          color: outcome === 'Win' ? 'var(--t-win)' : outcome === 'Loss' ? 'var(--t-loss)' : 'var(--t-be)',
+                        }}>
                           {outcome}
                         </span>
                       </td>
@@ -1048,9 +1051,8 @@ export default function Protocols() {
             ].map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors -mb-px ${activeTab === tab.id
-                  ? 'border-[#00d28a] text-white'
-                  : 'border-transparent text-[#444] hover:text-[#666]'
-                }`}>
+                  ? 'border-transparent text-white' : 'border-transparent text-[#444] hover:text-[#666]'
+                }`} style={activeTab === tab.id ? { borderBottomColor: 'var(--t-accent)' } : {}}>
                 {tab.icon}{tab.label}
               </button>
             ))}

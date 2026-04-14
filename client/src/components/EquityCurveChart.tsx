@@ -52,13 +52,13 @@ export function EquityCurveChart({ trades }: EquityCurveChartProps) {
     const datasets: any[] = [{
       label: "Actual",
       data: data.map(d => d.y),
-      borderColor: "#00d28a",
+      borderColor: getComputedStyle(document.documentElement).getPropertyValue("--t-win").trim() || "#00d28a",
       backgroundColor: gradient,
       fill: true,
       tension: 0.3,
       pointRadius: 0,
       pointHoverRadius: 4,
-      pointHoverBackgroundColor: "#00d28a",
+      pointHoverBackgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--t-win").trim() || "#00d28a",
       borderWidth: 2,
     }];
 

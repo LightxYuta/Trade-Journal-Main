@@ -102,7 +102,7 @@ export default function Sidebar({ minimized, setMinimized }: { minimized: boolea
                   width: "2px",
                   height: isActive ? "55%" : "0%",
                   transform: "translateY(-50%)",
-                  background: "linear-gradient(180deg, #00d28a, #00ff9d)",
+                  background: "linear-gradient(180deg, var(--t-nav-active), var(--t-nav-active))",
                   boxShadow: isActive ? "0 0 8px rgba(0,210,138,0.5)" : "none",
                   transition: "height 0.2s ease, box-shadow 0.2s ease",
                 }}
@@ -112,7 +112,7 @@ export default function Sidebar({ minimized, setMinimized }: { minimized: boolea
                 style={{
                   width: "15px",
                   height: "15px",
-                  color: isActive ? "#00d28a" : isHovered ? "#777" : "#333",
+                  color: isActive ? "var(--t-nav-active)" : isHovered ? "#777" : "#333",
                   transition: "color 0.15s ease",
                 }}
               />

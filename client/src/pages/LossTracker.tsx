@@ -49,16 +49,16 @@ function getRootCause(entry: LossEntry, conditions: LossCondition[]): { label: s
   const negativeChecked = conditions.filter(c => c.danger && entryConditions[c.id]);
   if (negativeChecked.length > 0) {
     const first = negativeChecked[0];
-    if (first.label.toLowerCase().includes("trap")) return { label: first.label, emoji: "🚫", color: "#ff4f4f" };
-    if (first.label.toLowerCase().includes("oe") || first.label.toLowerCase().includes("overext")) return { label: first.label, emoji: "⚠️", color: "#ffd76e" };
-    if (first.label.toLowerCase().includes("re-entry") || first.label.toLowerCase().includes("reentry")) return { label: first.label, emoji: "🔄", color: "#ffd76e" };
-    return { label: first.label, emoji: "❌", color: "#ff4f4f" };
+    if (first.label.toLowerCase().includes("trap")) return { label: first.label, emoji: "🚫", color: "var(--t-loss)" };
+    if (first.label.toLowerCase().includes("oe") || first.label.toLowerCase().includes("overext")) return { label: first.label, emoji: "⚠️", color: "var(--t-gold)" };
+    if (first.label.toLowerCase().includes("re-entry") || first.label.toLowerCase().includes("reentry")) return { label: first.label, emoji: "🔄", color: "var(--t-gold)" };
+    return { label: first.label, emoji: "❌", color: "var(--t-loss)" };
   }
   const positiveUnchecked = conditions.filter(c => !c.danger && !entryConditions[c.id]);
   if (positiveUnchecked.length > 0) {
-    return { label: `Weak ${positiveUnchecked[0].label}`, emoji: "⚠️", color: "#ffd76e" };
+    return { label: `Weak ${positiveUnchecked[0].label}`, emoji: "⚠️", color: "var(--t-gold)" };
   }
-  return { label: "Clean Loss", emoji: "✅", color: "#00d28a" };
+  return { label: "Clean Loss", emoji: "✅", color: "var(--t-win)" };
 }
 
 // ── Tag badge ─────────────────────────────────────────────────────────────────
@@ -373,9 +373,9 @@ export default function LossTracker() {
                 <p className="text-xs text-[#555] mb-4">A / B / C distribution</p>
                 <div className="space-y-3">
                   {([
-                    { tag: "A", losses: aLosses, label: "Straight to stop", color: "#ff4f4f", bg: "bg-[#ff4f4f]" },
-                    { tag: "B", losses: bLosses, label: "Moved 0.2R–1R then reversed", color: "#ffd76e", bg: "bg-[#ffd76e]" },
-                    { tag: "C", losses: cLosses, label: "Hit 1R+ then reversed", color: "#00d28a", bg: "bg-[#00d28a]" },
+                    { tag: "A", losses: aLosses, label: "Straight to stop", color: "var(--t-loss)", bg: "bg-[#ff4f4f]" },
+                    { tag: "B", losses: bLosses, label: "Moved 0.2R–1R then reversed", color: "var(--t-gold)", bg: "bg-[#ffd76e]" },
+                    { tag: "C", losses: cLosses, label: "Hit 1R+ then reversed", color: "var(--t-win)", bg: "bg-[#00d28a]" },
                   ] as const).map((item) => {
                     const pct = total > 0 ? (item.losses.length / total) * 100 : 0;
                     return (

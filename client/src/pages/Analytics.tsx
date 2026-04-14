@@ -74,9 +74,9 @@ function generateInsights(trades: any[], sessionPerf: any[], dayPerf: any[], sym
     const best = symbolStats[0];
     const worst = symbolStats[symbolStats.length - 1];
     if (best.totalR > 0)
-      insights.push({ text: `${best.symbol} is your best instrument — ${formatR(best.totalR)} at ${best.winRate.toFixed(0)}% WR`, color: "#00d28a", icon: "↑" });
+      insights.push({ text: `${best.symbol} is your best instrument — ${formatR(best.totalR)} at ${best.winRate.toFixed(0)}% WR`, color: WIN, icon: "↑" });
     if (worst.totalR < 0)
-      insights.push({ text: `${worst.symbol} is costing you — ${formatR(worst.totalR)} over ${worst.trades} trades`, color: "#ff4f4f", icon: "↓" });
+      insights.push({ text: `${worst.symbol} is costing you — ${formatR(worst.totalR)} over ${worst.trades} trades`, color: LOSS, icon: "↓" });
   }
 
   // Best vs worst session
@@ -85,9 +85,9 @@ function generateInsights(trades: any[], sessionPerf: any[], dayPerf: any[], sym
     const bestS = sortedSessions[0];
     const worstS = sortedSessions[sortedSessions.length - 1];
     if (bestS.totalR > 0)
-      insights.push({ text: `${bestS.label} is your strongest session — ${formatR(bestS.totalR)} at ${bestS.winRate.toFixed(0)}% WR`, color: "#00d28a", icon: "→" });
+      insights.push({ text: `${bestS.label} is your strongest session — ${formatR(bestS.totalR)} at ${bestS.winRate.toFixed(0)}% WR`, color: WIN, icon: "→" });
     if (worstS.totalR < 0)
-      insights.push({ text: `${worstS.label} is dragging your results — ${formatR(worstS.totalR)} lost`, color: "#ff4f4f", icon: "→" });
+      insights.push({ text: `${worstS.label} is dragging your results — ${formatR(worstS.totalR)} lost`, color: LOSS, icon: "→" });
   }
 
   // Best day of week
@@ -96,18 +96,18 @@ function generateInsights(trades: any[], sessionPerf: any[], dayPerf: any[], sym
     const bestDay = [...activeDays].sort((a, b) => b.totalR - a.totalR)[0];
     const worstDay = [...activeDays].sort((a, b) => a.totalR - b.totalR)[0];
     if (bestDay.totalR > 0)
-      insights.push({ text: `${bestDay.label} is your best trading day — ${formatR(bestDay.totalR)} across ${bestDay.trades} trades`, color: "#00d28a", icon: "★" });
+      insights.push({ text: `${bestDay.label} is your best trading day — ${formatR(bestDay.totalR)} across ${bestDay.trades} trades`, color: WIN, icon: "★" });
     if (worstDay.totalR < 0 && worstDay.label !== bestDay.label)
-      insights.push({ text: `${worstDay.label} is your worst day — ${formatR(worstDay.totalR)} lost`, color: "#ff4f4f", icon: "✕" });
+      insights.push({ text: `${worstDay.label} is your worst day — ${formatR(worstDay.totalR)} lost`, color: LOSS, icon: "✕" });
   }
 
   // Avg win vs avg loss
   if (stats.avgWin > 0 && stats.avgLoss < 0) {
     const ratio = (stats.avgWin / Math.abs(stats.avgLoss));
     if (ratio >= 2)
-      insights.push({ text: `Your winners are ${ratio.toFixed(1)}x bigger than your losers — strong payoff ratio`, color: "#00d28a", icon: "↑" });
+      insights.push({ text: `Your winners are ${ratio.toFixed(1)}x bigger than your losers — strong payoff ratio`, color: WIN, icon: "↑" });
     else if (ratio < 1.5)
-      insights.push({ text: `Avg win (${formatR(stats.avgWin)}) is only ${ratio.toFixed(1)}x avg loss (${formatR(stats.avgLoss)}) — push targets harder`, color: "#ffd76e", icon: "!" });
+      insights.push({ text: `Avg win (${formatR(stats.avgWin)}) is only ${ratio.toFixed(1)}x avg loss (${formatR(stats.avgLoss)}) — push targets harder`, color: GOLD, icon: "!" });
   }
 
   // Overtrading signal
@@ -117,14 +117,22 @@ function generateInsights(trades: any[], sessionPerf: any[], dayPerf: any[], sym
     return m;
   })()).length) : 0;
   if (avgTradesPerMonth > 25)
-    insights.push({ text: `Averaging ${avgTradesPerMonth.toFixed(0)} trades/month — your best months had ~18. Consider trading less`, color: "#ffd76e", icon: "!" });
+    insights.push({ text: `Averaging ${avgTradesPerMonth.toFixed(0)} trades/month — your best months had ~18. Consider trading less`, color: GOLD, icon: "!" });
 
   // Profit factor context
   if (stats.profitFactor >= 2)
-    insights.push({ text: `Profit factor of ${stats.profitFactor.toFixed(2)} — top 10% of retail traders are above 2.0`, color: "#00d28a", icon: "★" });
+    insights.push({ text: `Profit factor of ${stats.profitFactor.toFixed(2)} — top 10% of retail traders are above 2.0`, color: WIN, icon: "★" });
 
   return insights.slice(0, 5);
 }
+
+// ── Color helpers — map hardcoded hex to CSS variable ─────────────────────────
+const WIN  = 'var(--t-win)';
+const LOSS = 'var(--t-loss)';
+const GOLD = 'var(--t-gold)';
+
+function winLoss(val: number) { return val >= 0 ? WIN : LOSS; }
+function winLossStrict(val: number) { return val > 0.0001 ? WIN : val < -0.0001 ? LOSS : GOLD; }
 
 // ── Section label ─────────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: string }) {
@@ -200,11 +208,11 @@ export default function Analytics() {
             {
               label: "Total R",
               data: monthlyData.map(m => parseFloat(m.totalR.toFixed(2))),
-              borderColor: "#00d28a",
+              borderColor: getComputedStyle(document.documentElement).getPropertyValue("--t-win").trim() || "#00d28a",
               backgroundColor: "rgba(0,210,138,0.05)",
               borderWidth: 2,
               pointRadius: 4,
-              pointBackgroundColor: monthlyData.map(m => m.totalR >= 0 ? "#00d28a" : "#ff4f4f"),
+              pointBackgroundColor: monthlyData.map(m => m.totalR >= 0 ? WIN : LOSS),
               tension: 0.3,
               fill: true,
               yAxisID: "yR",
@@ -212,11 +220,11 @@ export default function Analytics() {
             {
               label: "Win Rate %",
               data: monthlyData.map(m => parseFloat(m.winRate.toFixed(1))),
-              borderColor: "#ffd76e",
+              borderColor: getComputedStyle(document.documentElement).getPropertyValue("--t-gold").trim() || "#ffd76e",
               backgroundColor: "rgba(255,215,110,0.0)",
               borderWidth: 1.5,
               pointRadius: 3,
-              pointBackgroundColor: "#ffd76e",
+              pointBackgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--t-gold").trim() || "#ffd76e",
               tension: 0.3,
               fill: false,
               borderDash: [4, 3],
@@ -269,11 +277,11 @@ export default function Analytics() {
           labels: weeklyCount.map(w => w.label),
           datasets: [{
             data: weeklyCount.map(w => w.count),
-            borderColor: "#ffd76e",
+            borderColor: getComputedStyle(document.documentElement).getPropertyValue("--t-gold").trim() || "#ffd76e",
             backgroundColor: "rgba(255,215,110,0.04)",
             borderWidth: 1.5,
             pointRadius: 3,
-            pointBackgroundColor: "#ffd76e",
+            pointBackgroundColor: getComputedStyle(document.documentElement).getPropertyValue("--t-gold").trim() || "#ffd76e",
             tension: 0.3,
             fill: true,
           }]
@@ -341,25 +349,25 @@ export default function Analytics() {
       <SectionLabel>Core Metrics</SectionLabel>
       <div className="grid grid-cols-4 gap-3 mb-4">
         <Tile label="Win Rate" value={`${displayStats.winrate.toFixed(1)}%`}
-          color={displayStats.winrate >= 50 ? "#00d28a" : "#ff4f4f"}
+          color={displayStats.winrate >= 50 ? WIN : LOSS}
           sub={showClean ? `${stats.winrate.toFixed(1)}% overall` : `${displayStats.wins}W · ${displayStats.losses}L · ${displayStats.bes}BE`} />
         <Tile label="Total R" value={formatR(displayStats.totalR)}
-          color={displayStats.totalR >= 0 ? "#00d28a" : "#ff4f4f"}
+          color={displayStats.totalR >= 0 ? WIN : LOSS}
           sub={`${displayStats.n} trades`} />
         <Tile label="Profit Factor" value={displayStats.profitFactor === Infinity ? "∞" : displayStats.profitFactor.toFixed(2)}
-          color={displayStats.profitFactor >= 2 ? "#00d28a" : displayStats.profitFactor >= 1 ? "#ffd76e" : "#ff4f4f"}
+          color={displayStats.profitFactor >= 2 ? WIN : displayStats.profitFactor >= 1 ? GOLD : LOSS}
           sub={displayStats.profitFactor >= 2 ? "Excellent" : displayStats.profitFactor >= 1 ? "Profitable" : "Needs work"} />
         <Tile label="Expectancy" value={formatR(displayStats.expR)}
-          color={displayStats.expR >= 0 ? "#00d28a" : "#ff4f4f"}
+          color={displayStats.expR >= 0 ? WIN : LOSS}
           sub="per trade" />
       </div>
       <div className="grid grid-cols-4 gap-3 mb-10">
         <Tile label="Sharpe Ratio" value={displayStats.sharpeRatio.toFixed(2)}
-          color={displayStats.sharpeRatio >= 2 ? "#00d28a" : displayStats.sharpeRatio >= 1 ? "#ffd76e" : "#ff4f4f"}
+          color={displayStats.sharpeRatio >= 2 ? WIN : displayStats.sharpeRatio >= 1 ? GOLD : LOSS}
           sub={displayStats.sharpeRatio >= 2 ? "Very strong" : displayStats.sharpeRatio >= 1 ? "Solid" : "Below target"} />
-        <Tile label="Avg Win" value={formatR(displayStats.avgWin)} color="#00d28a" sub="per winning trade" />
-        <Tile label="Avg Loss" value={formatR(displayStats.avgLoss)} color="#ff4f4f" sub="per losing trade" />
-        <Tile label="Max Drawdown" value={formatR(-displayStats.maxDrawdown)} color="#ff4f4f"
+        <Tile label="Avg Win" value={formatR(displayStats.avgWin)} color={WIN} sub="per winning trade" />
+        <Tile label="Avg Loss" value={formatR(displayStats.avgLoss)} color={LOSS} sub="per losing trade" />
+        <Tile label="Max Drawdown" value={formatR(-displayStats.maxDrawdown)} color={LOSS}
           sub={`${displayStats.worstLossStreak} max consec losses`} />
       </div>
 
@@ -484,7 +492,7 @@ export default function Analytics() {
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-[#111] overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${barW}%`, backgroundColor: s.totalR >= 0 ? "#00d28a" : "#ff4f4f", opacity: 0.6 }} />
+                    <div className="h-full rounded-full" style={{ width: `${barW}%`, backgroundColor: s.totalR >= 0 ? WIN : LOSS, opacity: 0.6 }} />
                   </div>
                 </div>
               );
@@ -528,7 +536,7 @@ export default function Analytics() {
                   <div className="flex-1 h-6 rounded-lg bg-[#0d0d0d] overflow-hidden relative">
                     <div className="h-full rounded-lg absolute left-0 top-0" style={{
                       width: `${barW}%`,
-                      backgroundColor: d.totalR >= 0 ? "rgba(0,210,138,0.25)" : "rgba(255,79,79,0.25)",
+                      backgroundColor: d.totalR >= 0 ? "rgba(var(--t-win-rgb, 0,210,138),0.25)" : "rgba(var(--t-loss-rgb, 255,79,79),0.25)",
                     }} />
                     <span className="absolute left-2.5 top-0 h-full flex items-center text-xs text-[#555]">
                       {d.trades}t
@@ -556,10 +564,10 @@ export default function Analytics() {
       <SectionLabel>Edge Quality</SectionLabel>
       <div className="grid grid-cols-4 gap-3 mb-10">
         <Tile label="Payoff Ratio" value={`${displayStats.winLossRatio.toFixed(2)}x`}
-          color={displayStats.winLossRatio >= 2 ? "#00d28a" : "#ffd76e"}
+          color={displayStats.winLossRatio >= 2 ? WIN : GOLD}
           sub="avg win ÷ avg loss" />
-        <Tile label="Best Win Streak" value={String(displayStats.bestWinStreak)} color="#00d28a" sub="consecutive wins" />
-        <Tile label="Worst Loss Streak" value={String(displayStats.worstLossStreak)} color="#ff4f4f" sub="consecutive losses" />
+        <Tile label="Best Win Streak" value={String(displayStats.bestWinStreak)} color={WIN} sub="consecutive wins" />
+        <Tile label="Worst Loss Streak" value={String(displayStats.worstLossStreak)} color={LOSS} sub="consecutive losses" />
         <Tile label="Active Days" value={String(displayStats.activeDays)} color="#ffffff" sub={`avg ${formatR(displayStats.avgPerDay)}/day`} />
       </div>
 
