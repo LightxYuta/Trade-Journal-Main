@@ -280,6 +280,28 @@ export default function Trades() {
 
   const handleDelete = (id: string) => { if (confirm("Delete this trade?")) deleteTrade(id); };
 
+  const exportJSON = () => {
+    if (!trades.length) { alert("No trades to export."); return; }
+    const exportData = {
+      version: 1,
+      exportDate: new Date().toISOString(),
+      trades: trades.map(t => ({
+        ...t,
+        keyLevels: Array.isArray(t.keyLevels) ? t.keyLevels : [],
+        mistakes: Array.isArray(t.mistakes) ? t.mistakes : [],
+      })),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trades_export_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const exportCSV = () => {
     if (!trades.length) { alert("No trades to export."); return; }
     const headers = ["id","date","symbol","account","model","session","entryTF","position","riskPercent","realisedR","maxR","setupGrade","keyLevels","mistakes","notes","createdAt"];
@@ -306,36 +328,77 @@ export default function Trades() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
-      const text = String(reader.result || '');
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { alert('CSV appears empty or has no data rows.'); return; }
-      const headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, ''));
-      let imported = 0, failed = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        const obj: any = {};
-        headers.forEach((h, idx) => { obj[h] = (values[idx] ?? '').replace(/^"|"$/g, '').trim(); });
-        const realisedR = parseFloat(obj.realisedR);
-        if (!obj.date || !obj.symbol || isNaN(realisedR)) { failed++; continue; }
-        try {
-          await addTrade({
-            date: obj.date, symbol: obj.symbol.toUpperCase(),
-            account: obj.account || '', model: obj.model || '', session: obj.session || '',
-            entryTF: obj.entryTF || '', position: obj.position || 'Long',
-            riskPercent: obj.riskPercent ? parseFloat(obj.riskPercent) : null,
-            realisedR,
-            maxR: obj.maxR ? parseFloat(obj.maxR) : realisedR,
-            setupGrade: obj.setupGrade || '',
-            keyLevels: obj.keyLevels ? obj.keyLevels.split(';').map((s: string) => s.trim()).filter(Boolean) : [],
-            mistakes: obj.mistakes ? obj.mistakes.split(';').map((s: string) => s.trim()).filter(Boolean) : [],
-            screenshots: '', notes: obj.notes || '',
-            createdAt: obj.createdAt ? parseInt(obj.createdAt) : Date.now(),
-          });
-          imported++;
-        } catch (err) { failed++; console.error('Row failed:', err, obj); }
+      try {
+        const text = String(reader.result || '');
+        let importList: any[] = [];
+
+        // Try JSON format first
+        if (file.name.endsWith('.json')) {
+          const data = JSON.parse(text);
+          if (data.trades && Array.isArray(data.trades)) {
+            importList = data.trades;
+          } else {
+            alert('Invalid JSON format. Expected { trades: [...], version: 1 }');
+            return;
+          }
+        } else {
+          // CSV format
+          const lines = text.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length < 2) {
+            alert('CSV appears empty or has no data rows.');
+            return;
+          }
+          const headers = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, ''));
+          for (let i = 1; i < lines.length; i++) {
+            const values = parseCSVLine(lines[i]);
+            const obj: any = {};
+            headers.forEach((h, idx) => {
+              obj[h] = (values[idx] ?? '').replace(/^"|"$/g, '').trim();
+            });
+            importList.push(obj);
+          }
+        }
+
+        let imported = 0, failed = 0;
+        for (const obj of importList) {
+          const realisedR = parseFloat(obj.realisedR);
+          if (!obj.date || !obj.symbol || isNaN(realisedR)) { failed++; continue; }
+          try {
+            await addTrade({
+              date: obj.date,
+              symbol: obj.symbol.toUpperCase(),
+              account: obj.account || '',
+              model: obj.model || '',
+              session: obj.session || '',
+              entryTF: obj.entryTF || '',
+              position: obj.position || 'Long',
+              riskPercent: obj.riskPercent ? parseFloat(obj.riskPercent) : null,
+              realisedR,
+              maxR: obj.maxR ? parseFloat(obj.maxR) : realisedR,
+              setupGrade: obj.setupGrade || '',
+              keyLevels: Array.isArray(obj.keyLevels)
+                ? obj.keyLevels
+                : obj.keyLevels ? obj.keyLevels.split(';').map((s: string) => s.trim()).filter(Boolean) : [],
+              mistakes: Array.isArray(obj.mistakes)
+                ? obj.mistakes
+                : obj.mistakes ? obj.mistakes.split(';').map((s: string) => s.trim()).filter(Boolean) : [],
+              screenshots: obj.screenshots || '',
+              notes: obj.notes || '',
+              createdAt: obj.createdAt ? (isNaN(parseInt(obj.createdAt)) ? Date.now() : parseInt(obj.createdAt)) : Date.now(),
+            });
+            imported++;
+          } catch (err) {
+            failed++;
+            console.error('Row failed:', err, obj);
+          }
+        }
+        alert(`Import complete: ${imported} added${failed ? `, ${failed} failed (check console)` : ''}.`);
+      } catch (err) {
+        console.error('Import error:', err);
+        alert('Failed to import file. Check console for details.');
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
-      alert(`Import complete: ${imported} added${failed ? `, ${failed} failed (check console)` : ''}.`);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
   };
@@ -359,9 +422,10 @@ export default function Trades() {
               <BookOpen className="w-3.5 h-3.5" /> Daily Bias
             </button>
           </div>
-          <button onClick={exportCSV} className="px-3 py-2 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Export</button>
+          <button onClick={exportCSV} className="px-3 py-2 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Export CSV</button>
+          <button onClick={exportJSON} className="px-3 py-2 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Export JSON</button>
           <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Import</button>
-          <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFile} style={{ display: "none" }} />
+          <input ref={fileInputRef} type="file" accept=".csv,.json,text/csv,application/json" onChange={handleFile} style={{ display: "none" }} />
           <button onClick={() => { setEditingId(null); setFormData(emptyForm); setIsFormOpen(true); }}
             className="px-4 py-2 rounded-lg bg-white text-black text-xs font-semibold hover:bg-[#e8e8e8] transition-colors flex items-center gap-1.5">
             <Plus className="w-3.5 h-3.5" /> Add Trade
