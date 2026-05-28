@@ -13,6 +13,24 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id'> = {
   tiltThreshold: 2,
 };
 
+// ─── Cache Management ────────────────────────────────────────────────────────
+
+const CACHE_DURATION = 30000; // 30 seconds
+let tradesCache: Trade[] | null = null;
+let tradesCacheTime = 0;
+let biasCache: { [key: string]: any } | null = null;
+let biasCacheTime = 0;
+
+function invalidateTradesCache() {
+  tradesCache = null;
+  tradesCacheTime = 0;
+}
+
+function invalidateBiasCache() {
+  biasCache = null;
+  biasCacheTime = 0;
+}
+
 // ─── Image helpers ───────────────────────────────────────────────────────────
 
 async function compressImage(file: File): Promise<Blob> {
@@ -63,12 +81,20 @@ export async function deleteImage(path: string): Promise<void> {
 // ─── Trades ──────────────────────────────────────────────────────────────────
 
 export async function loadTrades(): Promise<Trade[]> {
+  // Return cached trades if fresh
+  if (tradesCache && Date.now() - tradesCacheTime < CACHE_DURATION) {
+    return tradesCache;
+  }
+
   const { data, error } = await supabase
     .from('trades')
-    .select('*')
-    .order('created_at', { ascending: false });
+    .select('*', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .limit(500); // Load max 500 trades for performance
+  
   if (error) throw error;
-  return (data || []).map(row => ({
+  
+  const trades = (data || []).map(row => ({
     ...row,
     entryTF: row.entry_tf,
     riskPercent: row.risk_percent,
@@ -79,6 +105,10 @@ export async function loadTrades(): Promise<Trade[]> {
     mistakes: row.mistakes || [],
     createdAt: row.created_at,
   }));
+  
+  tradesCache = trades;
+  tradesCacheTime = Date.now();
+  return trades;
 }
 
 export async function addTrade(trade: Omit<Trade, 'id'>): Promise<Trade> {
@@ -109,6 +139,8 @@ export async function addTrade(trade: Omit<Trade, 'id'>): Promise<Trade> {
 
   const { error } = await supabase.from('trades').insert(row);
   if (error) throw error;
+  
+  invalidateTradesCache();
   return { ...trade, id };
 }
 
@@ -133,13 +165,34 @@ export async function updateTrade(id: string, updates: Partial<Trade>): Promise<
   const { error } = await supabase.from('trades').update(row).eq('id', id);
   if (error) throw error;
 
-  const trades = await loadTrades();
-  return trades.find(t => t.id === id) || null;
+  invalidateTradesCache();
+  
+  // Query only the updated trade instead of all trades
+  const { data, error: selectError } = await supabase
+    .from('trades')
+    .select('*')
+    .eq('id', id)
+    .single();
+  
+  if (selectError || !data) return null;
+  
+  return {
+    ...data,
+    entryTF: data.entry_tf,
+    riskPercent: data.risk_percent,
+    realisedR: data.realised_r,
+    maxR: data.max_r,
+    setupGrade: data.setup_grade,
+    keyLevels: data.key_levels || [],
+    mistakes: data.mistakes || [],
+    createdAt: data.created_at,
+  };
 }
 
 export async function deleteTrade(id: string): Promise<boolean> {
   const { error } = await supabase.from('trades').delete().eq('id', id);
   if (error) throw error;
+  invalidateTradesCache();
   return true;
 }
 
@@ -147,6 +200,7 @@ export async function clearAllTrades(): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not logged in');
   await supabase.from('trades').delete().eq('user_id', user.id);
+  invalidateTradesCache();
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
@@ -211,12 +265,20 @@ export interface BiasEntry {
 }
 
 export async function loadBiasEntries(): Promise<BiasEntry[]> {
+  // Return cached bias if fresh
+  if (biasCache && Date.now() - biasCacheTime < CACHE_DURATION) {
+    return biasCache;
+  }
+
   const { data, error } = await supabase
     .from('daily_bias')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(200); // Limit for performance
+  
   if (error) throw error;
-  return (data || []).map(row => ({
+  
+  const bias = (data || []).map(row => ({
     id: row.id,
     date: row.date,
     asset: row.asset || '',
@@ -224,6 +286,10 @@ export async function loadBiasEntries(): Promise<BiasEntry[]> {
     images: row.images || [],
     createdAt: row.created_at,
   }));
+  
+  biasCache = bias;
+  biasCacheTime = Date.now();
+  return bias;
 }
 
 export async function saveBiasEntry(entry: BiasEntry): Promise<void> {
@@ -239,8 +305,11 @@ export async function saveBiasEntry(entry: BiasEntry): Promise<void> {
     images: entry.images,
     created_at: entry.createdAt,
   });
+  
+  invalidateBiasCache();
 }
 
 export async function deleteBiasEntry(id: string): Promise<void> {
   await supabase.from('daily_bias').delete().eq('id', id);
+  invalidateBiasCache();
 }
