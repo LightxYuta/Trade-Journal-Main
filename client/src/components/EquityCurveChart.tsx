@@ -75,6 +75,10 @@ export function EquityCurveChart({ trades }: EquityCurveChartProps) {
       });
     }
 
+    // Calculate stepSize to show ~6-8 ticks on X-axis
+    const numTrades = data.length;
+    const stepSize = Math.max(1, Math.ceil(numTrades / 7));
+
     chartRef.current = new window.Chart(ctx, {
       type: "line",
       data: { labels: data.map(d => d.x), datasets },
@@ -108,7 +112,15 @@ export function EquityCurveChart({ trades }: EquityCurveChartProps) {
         scales: {
           x: {
             grid: { color: "rgba(255,255,255,0.03)" },
-            ticks: { color: "#333", font: { size: 10 }, maxTicksLimit: 10 }
+            ticks: { 
+              color: "#333", 
+              font: { size: 10 },
+              stepSize: stepSize,
+              callback: (value: number) => {
+                const intValue = Math.round(value);
+                return intValue > 0 ? `${intValue}R` : "";
+              }
+            }
           },
           y: {
             grid: { color: "rgba(255,255,255,0.03)" },
