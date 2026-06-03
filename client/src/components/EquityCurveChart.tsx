@@ -75,9 +75,9 @@ export function EquityCurveChart({ trades }: EquityCurveChartProps) {
       });
     }
 
-    // Calculate stepSize to show ~6-8 ticks on X-axis
+    // Calculate stepSize to show ~6-8 ticks on Y-axis
     const numTrades = data.length;
-    const stepSize = Math.max(1, Math.ceil(numTrades / 7));
+    const yAxisStepSize = Math.max(1, Math.ceil(Math.max(...data.map(d => d.y)) / 7));
 
     chartRef.current = new window.Chart(ctx, {
       type: "line",
@@ -112,19 +112,19 @@ export function EquityCurveChart({ trades }: EquityCurveChartProps) {
         scales: {
           x: {
             grid: { color: "rgba(255,255,255,0.03)" },
-            ticks: { 
-              color: "#333", 
-              font: { size: 10 },
-              stepSize: stepSize,
-              callback: (value: number) => {
-                const intValue = Math.round(value);
-                return intValue > 0 ? `${intValue}R` : "";
-              }
-            }
+            ticks: { color: "#333", font: { size: 10 }, maxTicksLimit: 10 }
           },
           y: {
             grid: { color: "rgba(255,255,255,0.03)" },
-            ticks: { color: "#333", font: { size: 10 }, callback: (v: number) => `${v}R` }
+            ticks: { 
+              color: "#333", 
+              font: { size: 10 },
+              stepSize: yAxisStepSize,
+              callback: (v: number) => {
+                const intValue = Math.round(v);
+                return `${intValue}R`;
+              }
+            }
           }
         }
       }
