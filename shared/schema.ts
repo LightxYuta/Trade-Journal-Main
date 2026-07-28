@@ -19,6 +19,8 @@ export const trades = pgTable("trades", {
   mistakes: text("mistakes").array(),
   screenshots: text("screenshots"),
   notes: text("notes"),
+  protocolId: text("protocol_id"),
+  customFieldValues: text("custom_field_values"),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -33,15 +35,37 @@ export const settings = pgTable("settings", {
   mistakes: text("mistakes").array(),
   nonNegotiableMistakes: text("non_negotiable_mistakes").array(),
   tiltThreshold: integer("tilt_threshold").default(2),
+  customFields: text("custom_fields"),
 });
 
 export const insertTradeSchema = createInsertSchema(trades).omit({ id: true });
 export const insertSettingsSchema = createInsertSchema(settings).omit({ id: true });
 
 export type InsertTrade = z.infer<typeof insertTradeSchema>;
-export type Trade = typeof trades.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
-export type Settings = typeof settings.$inferSelect;
+
+// Custom field definitions let the user add/remove their own trade fields
+// from the Settings page (e.g. "Liquidity Swept", "Confluence Count").
+export type CustomFieldType = "text" | "number" | "select" | "tags";
+
+export interface CustomFieldDef {
+  id: string;
+  label: string;
+  type: CustomFieldType;
+  options?: string[]; // used for "select" and "tags" types
+}
+
+// customFieldValues is stored as a JSON string in the DB (custom_field_values
+// column) but exposed to the app as a parsed object keyed by CustomFieldDef.id.
+export type CustomFieldValues = Record<string, string | string[]>;
+
+// Override the DB-inferred string columns with their parsed app-level shapes.
+export type Trade = Omit<typeof trades.$inferSelect, "customFieldValues"> & {
+  customFieldValues?: CustomFieldValues | null;
+};
+export type Settings = Omit<typeof settings.$inferSelect, "customFields"> & {
+  customFields?: CustomFieldDef[];
+};
 
 export interface TradeStats {
   n: number;

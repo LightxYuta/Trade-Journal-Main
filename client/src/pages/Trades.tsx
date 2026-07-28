@@ -1,9 +1,11 @@
-import { useState, useMemo, useRef } from "react";
-import { Plus, X, Trash2, Edit2, ChevronLeft, ChevronRight, BookOpen, ImagePlus, ZoomIn } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { Plus, X, Trash2, Edit2, ChevronLeft, ChevronRight, BookOpen, ImagePlus, ZoomIn, LayoutTemplate, Save, ChevronDown } from "lucide-react";
 import { useTradeContext } from "@/contexts/TradeContext";
 import { useYearFilter } from "@/contexts/YearFilterContext";
 import { classifyOutcome, formatDate, formatR } from "@/lib/tradeUtils";
-import type { Trade } from "@shared/schema";
+import { loadTradeTemplates, saveTradeTemplate, deleteTradeTemplate, type TradeTemplate } from "@/lib/storage";
+import { loadProtocols, type Protocol } from "@/lib/protocolStorage";
+import type { Trade, CustomFieldValues } from "@shared/schema";
 
 const TRADES_PER_PAGE = 20;
 const DAILY_BIAS_KEY = "tj_daily_bias_v2";
@@ -184,8 +186,73 @@ export default function Trades() {
     tradeImage2: "",
     tradeImage3: "",
     notes: "",
+    protocolId: "",
+    customFieldValues: {} as CustomFieldValues,
   };
   const [formData, setFormData] = useState(emptyForm);
+
+  // Trade templates (save/load a pre-filled trade layout)
+  const [templates, setTemplates] = useState<TradeTemplate[]>(() => loadTradeTemplates());
+  const [templatesMenuOpen, setTemplatesMenuOpen] = useState(false);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState("");
+
+  // Protocols (to link a trade to a protocol so it shows up there too)
+  const [protocols, setProtocols] = useState<Protocol[]>([]);
+  useEffect(() => {
+    loadProtocols().then(setProtocols).catch(() => setProtocols([]));
+  }, []);
+
+  const applyTemplate = (tpl: TradeTemplate) => {
+    setFormData(prev => ({
+      ...prev,
+      symbol: tpl.data.symbol, account: tpl.data.account, model: tpl.data.model,
+      session: tpl.data.session, entryTF: tpl.data.entryTF, position: tpl.data.position || "Long",
+      riskPercent: tpl.data.riskPercent, setupGrade: tpl.data.setupGrade,
+      keyLevels: tpl.data.keyLevels || [], mistakes: tpl.data.mistakes || [],
+      protocolId: tpl.data.protocolId || "", customFieldValues: tpl.data.customFieldValues || {},
+      notes: tpl.data.notes || "",
+    }));
+    setTemplatesMenuOpen(false);
+  };
+
+  const saveCurrentAsTemplate = () => {
+    if (!newTemplateName.trim()) return;
+    const tpl: TradeTemplate = {
+      id: crypto.randomUUID(),
+      name: newTemplateName.trim(),
+      data: {
+        symbol: formData.symbol, account: formData.account, model: formData.model,
+        session: formData.session, entryTF: formData.entryTF, position: formData.position,
+        riskPercent: formData.riskPercent, setupGrade: formData.setupGrade,
+        keyLevels: formData.keyLevels, mistakes: formData.mistakes,
+        protocolId: formData.protocolId, customFieldValues: formData.customFieldValues,
+        notes: formData.notes,
+      },
+      createdAt: Date.now(),
+    };
+    setTemplates(saveTradeTemplate(tpl));
+    setNewTemplateName("");
+    setSaveTemplateOpen(false);
+  };
+
+  const removeTemplate = (id: string) => {
+    if (!confirm("Delete this template?")) return;
+    setTemplates(deleteTradeTemplate(id));
+  };
+
+  const setCustomFieldValue = (fieldId: string, value: string | string[]) => {
+    setFormData(prev => ({ ...prev, customFieldValues: { ...prev.customFieldValues, [fieldId]: value } }));
+  };
+
+  const toggleCustomFieldTag = (fieldId: string, value: string) => {
+    setFormData(prev => {
+      const curr = prev.customFieldValues[fieldId];
+      const arr = Array.isArray(curr) ? curr : [];
+      const next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+      return { ...prev, customFieldValues: { ...prev.customFieldValues, [fieldId]: next } };
+    });
+  };
 
   const yearFilteredTrades = useMemo(() => {
     if (year === "all") return trades;
@@ -250,6 +317,8 @@ export default function Trades() {
       entryTF: formData.entryTF, position: formData.position, riskPercent, realisedR, maxR,
       setupGrade: formData.setupGrade, keyLevels: formData.keyLevels,
       mistakes: formData.mistakes, screenshots, notes: formData.notes,
+      protocolId: formData.protocolId || null,
+      customFieldValues: formData.customFieldValues,
     };
 
     if (editingId) { updateTrade(editingId, payload); setEditingId(null); }
@@ -274,7 +343,11 @@ export default function Trades() {
       tradeImage2: scrArr[1] || "",
       tradeImage3: scrArr[2] || "",
       notes: t.notes || "",
+      protocolId: t.protocolId || "",
+      customFieldValues: t.customFieldValues || {},
     });
+    setTemplatesMenuOpen(false);
+    setSaveTemplateOpen(false);
     setIsFormOpen(true);
   };
 
@@ -384,6 +457,8 @@ export default function Trades() {
                 : obj.mistakes ? obj.mistakes.split(';').map((s: string) => s.trim()).filter(Boolean) : [],
               screenshots: obj.screenshots || '',
               notes: obj.notes || '',
+              protocolId: obj.protocolId || null,
+              customFieldValues: obj.customFieldValues && typeof obj.customFieldValues === 'object' ? obj.customFieldValues : {},
               createdAt: obj.createdAt ? (isNaN(parseInt(obj.createdAt)) ? Date.now() : parseInt(obj.createdAt)) : Date.now(),
             });
             imported++;
@@ -426,7 +501,7 @@ export default function Trades() {
           <button onClick={exportJSON} className="px-3 py-2 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Export JSON</button>
           <button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Import</button>
           <input ref={fileInputRef} type="file" accept=".csv,.json,text/csv,application/json" onChange={handleFile} style={{ display: "none" }} />
-          <button onClick={() => { setEditingId(null); setFormData(emptyForm); setIsFormOpen(true); }}
+          <button onClick={() => { setEditingId(null); setFormData(emptyForm); setTemplatesMenuOpen(false); setSaveTemplateOpen(false); setIsFormOpen(true); }}
             className="px-4 py-2 rounded-lg bg-white text-black text-xs font-semibold hover:bg-[#e8e8e8] transition-colors flex items-center gap-1.5">
             <Plus className="w-3.5 h-3.5" /> Add Trade
           </button>
@@ -757,7 +832,7 @@ export default function Trades() {
       {/* ── Add/Edit Trade Modal ── */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
-          onClick={(e) => e.target === e.currentTarget && (setIsFormOpen(false), setEditingId(null))}>
+          onClick={(e) => e.target === e.currentTarget && (setIsFormOpen(false), setEditingId(null), setTemplatesMenuOpen(false), setSaveTemplateOpen(false))}>
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#1e1e1e] bg-[#0a0a0a]"
             style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.06) transparent" }}>
             <div className="flex items-center justify-between px-6 py-5 border-b border-[#1a1a1a] sticky top-0 bg-[#0a0a0a] z-10">
@@ -765,11 +840,57 @@ export default function Trades() {
                 <h2 className="text-sm font-semibold text-white">{editingId ? "Edit Trade" : "Log New Trade"}</h2>
                 <p className="text-xs text-[#444] mt-0.5">Fill in the details below</p>
               </div>
-              <button onClick={() => (setIsFormOpen(false), setEditingId(null))}
-                className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-white transition-colors">
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button type="button" onClick={() => setTemplatesMenuOpen(v => !v)}
+                    className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-[#888] hover:text-white transition-colors flex items-center gap-1.5">
+                    <LayoutTemplate className="w-3.5 h-3.5" /> Templates <ChevronDown className="w-3 h-3" />
+                  </button>
+                  {templatesMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-64 rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] shadow-xl z-20 overflow-hidden">
+                      <button type="button" onClick={() => { setSaveTemplateOpen(true); setTemplatesMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-white hover:bg-[#151515] transition-colors border-b border-[#1a1a1a]">
+                        <Save className="w-3.5 h-3.5" /> Save current as template
+                      </button>
+                      <div className="max-h-56 overflow-y-auto">
+                        {templates.length === 0 ? (
+                          <p className="px-3 py-3 text-xs text-[#444]">No saved templates yet</p>
+                        ) : templates.map(tpl => (
+                          <div key={tpl.id} className="flex items-center justify-between px-3 py-2 hover:bg-[#151515] transition-colors group">
+                            <button type="button" onClick={() => applyTemplate(tpl)}
+                              className="text-xs text-[#ccc] hover:text-white text-left flex-1 truncate">
+                              {tpl.name}
+                            </button>
+                            <button type="button" onClick={() => removeTemplate(tpl.id)}
+                              className="text-[#444] hover:text-[#ff4f4f] opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => (setIsFormOpen(false), setEditingId(null), setTemplatesMenuOpen(false), setSaveTemplateOpen(false))}
+                  className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-white transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
+
+            {/* Save-as-template inline prompt */}
+            {saveTemplateOpen && (
+              <div className="px-6 py-3 border-b border-[#1a1a1a] bg-[#0d0d0d] flex items-center gap-2">
+                <input type="text" autoFocus value={newTemplateName} onChange={(e) => setNewTemplateName(e.target.value)}
+                  placeholder="Template name, e.g. EU London A+"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveCurrentAsTemplate(); } }}
+                  className="flex-1 bg-[#080808] border border-[#1e1e1e] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#333]" />
+                <button type="button" onClick={saveCurrentAsTemplate}
+                  className="px-3 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-[#e8e8e8] transition-colors">Save</button>
+                <button type="button" onClick={() => { setSaveTemplateOpen(false); setNewTemplateName(""); }}
+                  className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-[#666] hover:text-white transition-colors">Cancel</button>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div className="grid grid-cols-3 gap-3">
@@ -822,6 +943,59 @@ export default function Trades() {
                   </div>
                 ))}
               </div>
+
+              <div>
+                <label className="block text-xs text-[#444] mb-1.5">Protocol <span className="text-[#333]">(optional — links this trade to a protocol)</span></label>
+                <select value={formData.protocolId} onChange={(e) => setFormData({ ...formData, protocolId: e.target.value })}
+                  className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none" style={{ colorScheme: "dark" }}>
+                  <option value="">None</option>
+                  {protocols.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+                </select>
+              </div>
+
+              {settings.customFields && settings.customFields.length > 0 && (
+                <div className="space-y-4">
+                  {settings.customFields.map(field => (
+                    <div key={field.id}>
+                      <label className="block text-xs text-[#444] mb-1.5">{field.label}</label>
+                      {field.type === "text" && (
+                        <input type="text"
+                          value={(formData.customFieldValues[field.id] as string) || ""}
+                          onChange={(e) => setCustomFieldValue(field.id, e.target.value)}
+                          className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]" />
+                      )}
+                      {field.type === "number" && (
+                        <input type="text" inputMode="decimal"
+                          value={(formData.customFieldValues[field.id] as string) || ""}
+                          onChange={(e) => setCustomFieldValue(field.id, e.target.value)}
+                          className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]" />
+                      )}
+                      {field.type === "select" && (
+                        <select value={(formData.customFieldValues[field.id] as string) || ""}
+                          onChange={(e) => setCustomFieldValue(field.id, e.target.value)}
+                          className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none" style={{ colorScheme: "dark" }}>
+                          <option value="">Select</option>
+                          {(field.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      )}
+                      {field.type === "tags" && (
+                        <div className="flex flex-wrap gap-2">
+                          {(field.options || []).map(o => {
+                            const arr = Array.isArray(formData.customFieldValues[field.id]) ? formData.customFieldValues[field.id] as string[] : [];
+                            const active = arr.includes(o);
+                            return (
+                              <button key={o} type="button" onClick={() => toggleCustomFieldTag(field.id, o)}
+                                className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${active ? "border-[#ffd76e] text-[#ffd76e] bg-[#1a1500]" : "border-[#1e1e1e] text-[#444] hover:text-white"}`}>
+                                {o}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {settings.keyLevels && settings.keyLevels.length > 0 && (
                 <div>
@@ -922,7 +1096,7 @@ export default function Trades() {
                   className="flex-1 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors flex items-center justify-center gap-2">
                   <Plus className="w-4 h-4" />{editingId ? "Update Trade" : "Log Trade"}
                 </button>
-                <button type="button" onClick={() => (setIsFormOpen(false), setEditingId(null))}
+                <button type="button" onClick={() => (setIsFormOpen(false), setEditingId(null), setTemplatesMenuOpen(false), setSaveTemplateOpen(false))}
                   className="flex-1 py-3 rounded-xl border border-[#1e1e1e] text-sm text-[#555] hover:text-white transition-colors">
                   Cancel
                 </button>

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Trade, Settings } from '@shared/schema';
+import type { Trade, Settings, CustomFieldDef, CustomFieldValues } from '@shared/schema';
 
 export const DEFAULT_SETTINGS: Omit<Settings, 'id'> = {
   accounts: ['5K Evaluation', '5K Funded', '10K Challenge', '25K Challenge', '50K Challenge', '100K Challenge', 'Demo'],
@@ -11,7 +11,25 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'id'> = {
   mistakes: ['Against 1H OF', '1H Consolidation', 'Trapped OF', 'Overextended Prev Session/Day'],
   nonNegotiableMistakes: [],
   tiltThreshold: 2,
+  customFields: [],
 };
+
+// ─── Custom field value helpers ───────────────────────────────────────────────
+// customFieldValues is persisted as a JSON string (custom_field_values column)
+// but used as a parsed object everywhere else in the app.
+
+export function parseCustomFieldValues(raw: string | null | undefined): CustomFieldValues {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
+}
+
+export function stringifyCustomFieldValues(values: CustomFieldValues | null | undefined): string {
+  if (!values || Object.keys(values).length === 0) return '';
+  return JSON.stringify(values);
+}
 
 // ─── Cache Management ────────────────────────────────────────────────────────
 
@@ -103,12 +121,39 @@ export async function loadTrades(): Promise<Trade[]> {
     setupGrade: row.setup_grade,
     keyLevels: row.key_levels || [],
     mistakes: row.mistakes || [],
+    protocolId: row.protocol_id || null,
+    customFieldValues: parseCustomFieldValues(row.custom_field_values),
     createdAt: row.created_at,
   }));
   
   tradesCache = trades;
   tradesCacheTime = Date.now();
   return trades;
+}
+
+// Trades logged in the journal that have been linked to a given protocol.
+// Reads from the same `trades` table (filtered by protocol_id), distinct
+// from the standalone `protocol_trades` research log used inside Protocols.
+export async function loadTradesByProtocol(protocolId: string): Promise<Trade[]> {
+  const { data, error } = await supabase
+    .from('trades')
+    .select('*')
+    .eq('protocol_id', protocolId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(row => ({
+    ...row,
+    entryTF: row.entry_tf,
+    riskPercent: row.risk_percent,
+    realisedR: row.realised_r,
+    maxR: row.max_r,
+    setupGrade: row.setup_grade,
+    keyLevels: row.key_levels || [],
+    mistakes: row.mistakes || [],
+    protocolId: row.protocol_id || null,
+    customFieldValues: parseCustomFieldValues(row.custom_field_values),
+    createdAt: row.created_at,
+  }));
 }
 
 export async function addTrade(trade: Omit<Trade, 'id'>): Promise<Trade> {
@@ -134,6 +179,8 @@ export async function addTrade(trade: Omit<Trade, 'id'>): Promise<Trade> {
     mistakes: trade.mistakes,
     screenshots: trade.screenshots,
     notes: trade.notes,
+    protocol_id: trade.protocolId || null,
+    custom_field_values: stringifyCustomFieldValues(trade.customFieldValues),
     created_at: trade.createdAt || Date.now(),
   };
 
@@ -161,6 +208,8 @@ export async function updateTrade(id: string, updates: Partial<Trade>): Promise<
   if (updates.mistakes !== undefined) row.mistakes = updates.mistakes;
   if (updates.screenshots !== undefined) row.screenshots = updates.screenshots;
   if (updates.notes !== undefined) row.notes = updates.notes;
+  if (updates.protocolId !== undefined) row.protocol_id = updates.protocolId || null;
+  if (updates.customFieldValues !== undefined) row.custom_field_values = stringifyCustomFieldValues(updates.customFieldValues);
 
   const { error } = await supabase.from('trades').update(row).eq('id', id);
   if (error) throw error;
@@ -185,6 +234,8 @@ export async function updateTrade(id: string, updates: Partial<Trade>): Promise<
     setupGrade: data.setup_grade,
     keyLevels: data.key_levels || [],
     mistakes: data.mistakes || [],
+    protocolId: data.protocol_id || null,
+    customFieldValues: parseCustomFieldValues(data.custom_field_values),
     createdAt: data.created_at,
   };
 }
@@ -211,6 +262,13 @@ export async function loadSettings(): Promise<Omit<Settings, 'id'>> {
     .select('*')
     .single();
   if (error || !data) return { ...DEFAULT_SETTINGS };
+  let customFields: CustomFieldDef[] = [];
+  try {
+    if (data.custom_fields) {
+      const parsed = JSON.parse(data.custom_fields);
+      if (Array.isArray(parsed)) customFields = parsed;
+    }
+  } catch {}
   return {
     accounts: data.accounts || DEFAULT_SETTINGS.accounts,
     models: data.models || DEFAULT_SETTINGS.models,
@@ -221,6 +279,7 @@ export async function loadSettings(): Promise<Omit<Settings, 'id'>> {
     mistakes: data.mistakes || DEFAULT_SETTINGS.mistakes,
     nonNegotiableMistakes: data.non_negotiable_mistakes || [],
     tiltThreshold: data.tilt_threshold ?? DEFAULT_SETTINGS.tiltThreshold,
+    customFields,
   };
 }
 
@@ -239,6 +298,7 @@ export async function saveSettings(settings: Omit<Settings, 'id'>): Promise<void
     mistakes: settings.mistakes,
     non_negotiable_mistakes: settings.nonNegotiableMistakes || [],
     tilt_threshold: settings.tiltThreshold,
+    custom_fields: settings.customFields && settings.customFields.length > 0 ? JSON.stringify(settings.customFields) : null,
   };
 
   await supabase.from('settings').upsert(row, { onConflict: 'user_id' });
@@ -251,6 +311,47 @@ export async function resetSettings(): Promise<void> {
 export async function fullReset(): Promise<void> {
   await clearAllTrades();
   await saveSettings({ ...DEFAULT_SETTINGS });
+}
+
+// ─── Trade Templates ────────────────────────────────────────────────────────
+// Quick-fill presets for trades that "look the same" — saved locally per
+// device since they're just a data-entry shortcut, not core journal data.
+
+const TRADE_TEMPLATES_KEY = 'tj_trade_templates_v1';
+
+export interface TradeTemplate {
+  id: string;
+  name: string;
+  data: {
+    symbol: string; account: string; model: string; session: string; entryTF: string;
+    position: string; riskPercent: string; setupGrade: string;
+    keyLevels: string[]; mistakes: string[]; protocolId: string;
+    customFieldValues: CustomFieldValues;
+    notes: string;
+  };
+  createdAt: number;
+}
+
+export function loadTradeTemplates(): TradeTemplate[] {
+  try {
+    const raw = localStorage.getItem(TRADE_TEMPLATES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+export function saveTradeTemplate(template: TradeTemplate): TradeTemplate[] {
+  const existing = loadTradeTemplates();
+  const updated = [template, ...existing];
+  try { localStorage.setItem(TRADE_TEMPLATES_KEY, JSON.stringify(updated)); } catch {}
+  return updated;
+}
+
+export function deleteTradeTemplate(id: string): TradeTemplate[] {
+  const updated = loadTradeTemplates().filter(t => t.id !== id);
+  try { localStorage.setItem(TRADE_TEMPLATES_KEY, JSON.stringify(updated)); } catch {}
+  return updated;
 }
 
 // ─── Daily Bias ───────────────────────────────────────────────────────────────

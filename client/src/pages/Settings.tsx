@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Trash2, AlertTriangle, ChevronRight } from "lucide-react";
+import { X, Plus, Trash2, AlertTriangle, ChevronRight, Pencil } from "lucide-react";
 import { useTradeContext } from "@/contexts/TradeContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import type { CustomFieldDef, CustomFieldType } from "@shared/schema";
 
 type SettingsKey = "accounts" | "models" | "sessions" | "entryTFs" | "setupGrades" | "keyLevels" | "mistakes";
 
@@ -50,6 +51,47 @@ export default function Settings() {
   const [tiltSaved, setTiltSaved] = useState(false);
   const [activeSection, setActiveSection] = useState<ActiveSection>("journal");
   const [nonNegotiableMistakes, setNonNegotiableMistakes] = useState<string[]>(settings.nonNegotiableMistakes || []);
+
+  // Custom trade fields — let the user add/remove their own fields for the trade form
+  const [customFieldEditorOpen, setCustomFieldEditorOpen] = useState(false);
+  const [editingCustomFieldId, setEditingCustomFieldId] = useState<string | null>(null);
+  const [cfLabel, setCfLabel] = useState("");
+  const [cfType, setCfType] = useState<CustomFieldType>("text");
+  const [cfOptionsText, setCfOptionsText] = useState("");
+
+  const openNewCustomField = () => {
+    setEditingCustomFieldId(null);
+    setCfLabel(""); setCfType("text"); setCfOptionsText("");
+    setCustomFieldEditorOpen(true);
+  };
+
+  const openEditCustomField = (f: CustomFieldDef) => {
+    setEditingCustomFieldId(f.id);
+    setCfLabel(f.label); setCfType(f.type); setCfOptionsText((f.options || []).join(", "));
+    setCustomFieldEditorOpen(true);
+  };
+
+  const saveCustomField = async () => {
+    if (!cfLabel.trim()) return;
+    const options = (cfType === "select" || cfType === "tags")
+      ? cfOptionsText.split(",").map(o => o.trim()).filter(Boolean)
+      : undefined;
+    const existing = settings.customFields || [];
+    let updated: CustomFieldDef[];
+    if (editingCustomFieldId) {
+      updated = existing.map(f => f.id === editingCustomFieldId ? { ...f, label: cfLabel.trim(), type: cfType, options } : f);
+    } else {
+      updated = [...existing, { id: crypto.randomUUID(), label: cfLabel.trim(), type: cfType, options }];
+    }
+    await updateSettings({ customFields: updated });
+    setCustomFieldEditorOpen(false);
+  };
+
+  const deleteCustomField = async (id: string) => {
+    if (!confirm("Delete this field? It will no longer appear on the trade form (existing trade data is kept but hidden).")) return;
+    const updated = (settings.customFields || []).filter(f => f.id !== id);
+    await updateSettings({ customFields: updated });
+  };
 
   // Keep local state in sync when settings load from Supabase
   useEffect(() => {
@@ -223,6 +265,46 @@ export default function Settings() {
                   </div>
                 </button>
               ))}
+            </div>
+
+            {/* Custom trade fields */}
+            <div className="rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] p-5 mb-8">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-medium">Custom Trade Fields</p>
+                <button onClick={openNewCustomField}
+                  className="px-3 py-1.5 rounded-lg border border-[#1e1e1e] text-xs text-white hover:bg-[#151515] transition-colors flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" /> Add Field
+                </button>
+              </div>
+              <p className="text-xs text-[#555] mb-4">Add or remove your own fields to capture when logging a new trade</p>
+
+              {(!settings.customFields || settings.customFields.length === 0) ? (
+                <p className="text-xs text-[#444]">No custom fields yet — add one above.</p>
+              ) : (
+                <div className="space-y-2">
+                  {settings.customFields.map(f => (
+                    <div key={f.id} className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-[#1a1a1a] bg-[#080808]">
+                      <div>
+                        <p className="text-sm text-white">{f.label}</p>
+                        <p className="text-xs text-[#555] mt-0.5">
+                          {f.type === "text" ? "Text" : f.type === "number" ? "Number" : f.type === "select" ? "Dropdown" : "Tags"}
+                          {f.options && f.options.length > 0 ? ` · ${f.options.join(", ")}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEditCustomField(f)}
+                          className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#555] hover:text-white transition-colors">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => deleteCustomField(f.id)}
+                          className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#555] hover:text-[#ff4f4f] transition-colors">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Tilt threshold */}
@@ -459,6 +541,58 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      {/* ── Custom field add/edit modal ── */}
+      {customFieldEditorOpen && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          onClick={(e) => e.target === e.currentTarget && setCustomFieldEditorOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-[#1e1e1e] bg-[#0a0a0a] overflow-hidden">
+            <div className="flex justify-between items-center px-6 py-5 border-b border-[#1a1a1a]">
+              <h2 className="text-sm font-semibold text-white">{editingCustomFieldId ? "Edit Field" : "Add Field"}</h2>
+              <button onClick={() => setCustomFieldEditorOpen(false)}
+                className="w-7 h-7 rounded-lg border border-[#222] flex items-center justify-center text-[#555] hover:text-white hover:border-[#444] transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs text-[#444] mb-1.5">Field Name</label>
+                <input type="text" autoFocus value={cfLabel} onChange={(e) => setCfLabel(e.target.value)}
+                  placeholder="e.g. Liquidity Swept"
+                  className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]" />
+              </div>
+              <div>
+                <label className="block text-xs text-[#444] mb-1.5">Field Type</label>
+                <select value={cfType} onChange={(e) => setCfType(e.target.value as CustomFieldType)}
+                  className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none" style={{ colorScheme: "dark" }}>
+                  <option value="text">Text (free entry)</option>
+                  <option value="number">Number</option>
+                  <option value="select">Dropdown (single choice)</option>
+                  <option value="tags">Tags (multi-select)</option>
+                </select>
+              </div>
+              {(cfType === "select" || cfType === "tags") && (
+                <div>
+                  <label className="block text-xs text-[#444] mb-1.5">Options <span className="text-[#333]">(comma separated)</span></label>
+                  <input type="text" value={cfOptionsText} onChange={(e) => setCfOptionsText(e.target.value)}
+                    placeholder="e.g. Yes, No, Unclear"
+                    className="w-full bg-[#080808] border border-[#1e1e1e] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]" />
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button onClick={saveCustomField}
+                  className="flex-1 py-3 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors">
+                  {editingCustomFieldId ? "Save Changes" : "Add Field"}
+                </button>
+                <button onClick={() => setCustomFieldEditorOpen(false)}
+                  className="flex-1 py-3 rounded-xl border border-[#1e1e1e] text-sm text-[#555] hover:text-white transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Edit dropdown modal ── */}
       {editingKey && (

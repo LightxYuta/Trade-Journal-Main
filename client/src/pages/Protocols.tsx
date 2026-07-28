@@ -7,6 +7,7 @@ import {
   MoreHorizontal, Save, ArrowLeft
 } from "lucide-react";
 import { useTradeContext } from "@/contexts/TradeContext";
+import { loadTradesByProtocol } from "@/lib/storage";
 import { classifyOutcome, formatDate, formatR } from "@/lib/tradeUtils";
 import { computeStats } from "@/lib/tradeUtils";
 import type { Trade } from "@shared/schema";
@@ -247,8 +248,7 @@ function BlockEditor({
             <textarea ref={textareaRef} value={block.content}
               onChange={e => onChange({ ...block, content: e.target.value })}
               placeholder="Write a callout note..."
-              className={`${textClass} text-sm`} style={{ color: 'var(--t-gold)' }}
-              style={{ minHeight: '28px' }}
+              className={`${textClass} text-sm`} style={{ color: 'var(--t-gold)', minHeight: '28px' }}
               rows={1} />
           </div>
         );
@@ -536,6 +536,17 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
+  // Trades logged from the main Trades page and linked to this protocol
+  const [linkedTrades, setLinkedTrades] = useState<Trade[]>([]);
+  const [linkedLoading, setLinkedLoading] = useState(true);
+  useEffect(() => {
+    setLinkedLoading(true);
+    loadTradesByProtocol(protocol.id)
+      .then(setLinkedTrades)
+      .catch(() => setLinkedTrades([]))
+      .finally(() => setLinkedLoading(false));
+  }, [protocol.id]);
+
   const emptyForm = {
     date: new Date().toISOString().split('T')[0],
     symbol: '', account: '', model: '', session: '', entryTF: '',
@@ -679,6 +690,61 @@ function ProtocolDataTab({ protocol }: { protocol: Protocol }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Linked Journal Trades — trades tagged to this protocol from the Trades page */}
+      {!linkedLoading && linkedTrades.length > 0 && (
+        <div className="rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1a1a]">
+            <p className="text-xs text-[#444] uppercase tracking-wider font-medium">Linked Journal Trades</p>
+            <span className="text-xs text-[#333]">{linkedTrades.length} linked from Trades page</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left bg-[#080808] border-b border-[#1a1a1a]">
+                  {["Date", "Symbol", "Position", "Realised R", "Session", "Account", "Grade"].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-xs text-[#333] font-medium whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {linkedTrades.map(t => {
+                  const outcome = classifyOutcome(t.realisedR);
+                  return (
+                    <tr key={t.id} className="border-t border-[#111] hover:bg-[#111] transition-colors">
+                      <td className="px-4 py-2.5 text-xs text-[#666] whitespace-nowrap">{formatDate(t.date)}</td>
+                      <td className="px-4 py-2.5 font-semibold text-white text-xs">{t.symbol}</td>
+                      <td className="px-4 py-2.5 text-xs text-[#555]">{t.position}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <span className={`text-sm font-semibold ${t.realisedR > 0 ? "text-[#00d28a]" : t.realisedR < 0 ? "text-[#ff4f4f]" : "text-[#888]"}`}>
+                          {formatR(t.realisedR)}
+                        </span>
+                        <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${
+                          outcome === "Win" ? "bg-[#0a2e1a] text-[#00d28a]" :
+                          outcome === "Loss" ? "bg-[#2e0a0a] text-[#ff4f4f]" :
+                          "bg-[#1a1500] text-[#ffd76e]"
+                        }`}>{outcome}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-[#444]">{t.session}</td>
+                      <td className="px-4 py-2.5 text-xs text-[#444] max-w-[100px] truncate">{t.account}</td>
+                      <td className="px-4 py-2.5">
+                        {t.setupGrade ? (
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                            t.setupGrade === "A+" ? "bg-[#0a1e0a] text-[#00d28a]" :
+                            t.setupGrade === "A" ? "bg-[#0a180a] text-[#4dba77]" :
+                            "bg-[#2e0a0a] text-[#ff6b6b]"
+                          }`}>{t.setupGrade}</span>
+                        ) : <span className="text-xs text-[#222]">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-4 py-2 text-xs text-[#333] border-t border-[#111]">Edit these on the Trades page — link or unlink a trade from a protocol there.</p>
         </div>
       )}
 

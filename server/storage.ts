@@ -58,10 +58,24 @@ export class MemStorage implements IStorage {
 
   async createTrade(insertTrade: InsertTrade): Promise<Trade> {
     const id = randomUUID();
-    const trade: Trade = { 
-      ...insertTrade, 
+    const { customFieldValues, ...rest } = insertTrade as any;
+    const trade: Trade = {
+      ...rest,
       id,
-      maxR: insertTrade.maxR ?? insertTrade.realisedR,
+      account: rest.account ?? null,
+      model: rest.model ?? null,
+      session: rest.session ?? null,
+      entryTF: rest.entryTF ?? null,
+      position: rest.position ?? "Long",
+      riskPercent: rest.riskPercent ?? null,
+      maxR: rest.maxR ?? insertTrade.realisedR,
+      setupGrade: rest.setupGrade ?? null,
+      keyLevels: rest.keyLevels ?? null,
+      mistakes: rest.mistakes ?? null,
+      screenshots: rest.screenshots ?? null,
+      notes: rest.notes ?? null,
+      protocolId: rest.protocolId ?? null,
+      customFieldValues: parseCustomFieldValuesString(customFieldValues),
     };
     this.trades.set(id, trade);
     return trade;
@@ -90,9 +104,40 @@ export class MemStorage implements IStorage {
 
   async createOrUpdateSettings(insertSettings: InsertSettings): Promise<Settings> {
     const id = this.settings?.id || randomUUID();
-    this.settings = { ...insertSettings, id };
-    return this.settings;
+    const { customFields, ...rest } = insertSettings as any;
+    const updated: Settings = {
+      ...rest,
+      id,
+      accounts: rest.accounts ?? null,
+      models: rest.models ?? null,
+      sessions: rest.sessions ?? null,
+      entryTFs: rest.entryTFs ?? null,
+      setupGrades: rest.setupGrades ?? null,
+      keyLevels: rest.keyLevels ?? null,
+      mistakes: rest.mistakes ?? null,
+      nonNegotiableMistakes: rest.nonNegotiableMistakes ?? null,
+      tiltThreshold: rest.tiltThreshold ?? 2,
+      customFields: parseCustomFieldsString(customFields),
+    };
+    this.settings = updated;
+    return updated;
   }
+}
+
+function parseCustomFieldValuesString(raw: unknown): Record<string, string | string[]> {
+  if (!raw || typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch { return {}; }
+}
+
+function parseCustomFieldsString(raw: unknown): Settings["customFields"] {
+  if (!raw || typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
 }
 
 export const storage = new MemStorage();
