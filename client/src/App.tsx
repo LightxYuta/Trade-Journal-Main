@@ -15,6 +15,7 @@ import LossTracker from "@/pages/LossTracker";
 import Mistakes from "@/pages/Mistakes";
 import Settings from "@/pages/Settings";
 import Protocols from "@/pages/Protocols";
+import DailyPlan from "@/pages/DailyPlan";
 import NotFound from "@/pages/not-found";
 import Auth from "@/pages/Auth";
 
@@ -83,6 +84,7 @@ function App() {
                   </div>
                 )} />
                 <Route path="/protocols" component={Protocols} />
+                <Route path="/daily-plan" component={DailyPlan} />
                 <Route path="/settings" component={() => (
                   <div style={sidebarMinimized ? { maxWidth: 1100, margin: '0 auto', width: '100%' } : {}}>
                     <Settings />

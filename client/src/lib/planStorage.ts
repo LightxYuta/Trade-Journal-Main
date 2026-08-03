@@ -365,7 +365,75 @@ export async function getDayVisualState(date: string, dayPlanId: string | null):
   return (count || 0) > 0 ? 'planless-trading' : 'no-plan-no-trade';
 }
 
-// ─── Streak (Mon-Fri only, breaks on ANY deviated asset that day) ────────────
+// ─── Bulk month data (avoids N+1 queries when rendering a calendar grid) ────
+
+export async function loadTradeDatesInRange(startDate: string, endDate: string): Promise<Record<string, number>> {
+  const { data, error } = await supabase.from('trades').select('date').gte('date', startDate).lte('date', endDate);
+  if (error) throw error;
+  const counts: Record<string, number> = {};
+  (data || []).forEach((r: any) => { counts[r.date] = (counts[r.date] || 0) + 1; });
+  return counts;
+}
+
+export interface MonthData {
+  dayPlans: Record<string, DayPlan>;           // date -> DayPlan
+  assetPlansByDate: Record<string, AssetPlan[]>; // date -> AssetPlan[]
+  tradeCounts: Record<string, number>;          // date -> # trades logged
+}
+
+function monthDateRange(year: number, month: number): [string, string] {
+  const start = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return [start, end];
+}
+
+export async function loadMonthData(year: number, month: number): Promise<MonthData> {
+  const [start, end] = monthDateRange(year, month);
+  const [dayPlansArr, assetPlansArr, tradeCounts] = await Promise.all([
+    loadDayPlansInRange(start, end),
+    loadAssetPlansInRange(start, end),
+    loadTradeDatesInRange(start, end),
+  ]);
+  const dayPlans: Record<string, DayPlan> = {};
+  const idToDate: Record<string, string> = {};
+  dayPlansArr.forEach(dp => { dayPlans[dp.date] = dp; idToDate[dp.id] = dp.date; });
+  const assetPlansByDate: Record<string, AssetPlan[]> = {};
+  assetPlansArr.forEach(ap => {
+    const date = idToDate[ap.dayPlanId];
+    if (!date) return;
+    (assetPlansByDate[date] ||= []).push(ap);
+  });
+  return { dayPlans, assetPlansByDate, tradeCounts };
+}
+
+export function dayVisualStateFromData(date: string, data: MonthData): DayVisualState {
+  const plans = data.assetPlansByDate[date] || [];
+  const hasContent = plans.some(p => (p.content && p.content.length > 0) || p.bias || p.tookTrade);
+  if (hasContent) return 'normal';
+  return (data.tradeCounts[date] || 0) > 0 ? 'planless-trading' : 'no-plan-no-trade';
+}
+
+// A week (Mon-Fri) "adherent" fraction + planless count, computed from
+// already-loaded MonthData so no extra queries are needed per week card.
+export function weekStatsFromData(weekdayDates: string[], data: MonthData): { pctFollowed: number; planlessCount: number; plannedCount: number } {
+  let followedDays = 0, plannedDays = 0, planlessCount = 0;
+  for (const date of weekdayDates) {
+    const plans = data.assetPlansByDate[date] || [];
+    const hasContent = plans.some(p => (p.content && p.content.length > 0) || p.bias || p.tookTrade);
+    if (!hasContent) {
+      if ((data.tradeCounts[date] || 0) > 0) planlessCount++;
+      continue;
+    }
+    plannedDays++;
+    const anyDeviated = plans.some(p => p.adherence === 'deviated');
+    if (!anyDeviated) followedDays++;
+  }
+  const pctFollowed = plannedDays > 0 ? Math.round((followedDays / plannedDays) * 100) : 0;
+  return { pctFollowed, planlessCount, plannedCount: plannedDays };
+}
+
+
 
 export async function computeDailyStreak(upToDate: string): Promise<number> {
   // Walk backwards from upToDate, skipping weekends, until we hit a day with
