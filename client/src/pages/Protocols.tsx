@@ -161,7 +161,8 @@ function ProtocolNotesEditor({ protocol }: { protocol: Protocol }) {
           key={protocol.id}
           content={content}
           onChange={handleChange}
-          uploadPathPrefix={`protocols/${protocol.id}`}
+          uploadCategory="protocols"
+          uploadIdHint={protocol.id}
           placeholder="Write your protocol notes, or press '/' for commands..."
         />
       </div>

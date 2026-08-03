@@ -22,10 +22,11 @@
 
 .bn-dark-wrapper .bn-editor {
   background: transparent;
-  padding: 0;
+  padding: 0 0 45vh 0;
   color: #ffffff;
   font-size: 0.875rem;
   line-height: 1.7;
+  min-height: 60vh;
 }
 
 .bn-dark-wrapper .bn-editor h1 { font-size: 1.5rem; font-weight: 700; }
