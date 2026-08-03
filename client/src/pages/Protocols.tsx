@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Plus, X, Trash2, Edit2, ChevronDown, ChevronRight,
-  BarChart2, FileText, ImagePlus, ZoomIn, GripVertical,
-  Table, Type, List, Hash, Minus, Lightbulb, AlignLeft,
+  BarChart2, FileText, ImagePlus, ZoomIn,
   CheckCircle2, TrendingUp, TrendingDown, Minus as MinusIcon,
-  MoreHorizontal, Save, ArrowLeft
+  Save, ArrowLeft
 } from "lucide-react";
+import BlockNoteEditor from "@/components/BlockNoteEditor";
 import { useTradeContext } from "@/contexts/TradeContext";
 import { loadTradesByProtocol } from "@/lib/storage";
 import { classifyOutcome, formatDate, formatR } from "@/lib/tradeUtils";
@@ -13,10 +13,11 @@ import { computeStats } from "@/lib/tradeUtils";
 import type { Trade } from "@shared/schema";
 import {
   loadProtocols, createProtocol, updateProtocol, deleteProtocol,
-  loadBlocks, saveBlocks, deleteBlock,
+  loadBlocks, loadProtocolContent, saveProtocolContent,
   loadProtocolTrades, addProtocolTrade, updateProtocolTrade, deleteProtocolTrade,
   uploadProtocolImage,
   type Protocol, type ProtocolBlock, type BlockType, type ProtocolTrade,
+  type TableMeta, type ImageMeta,
 } from "@/lib/protocolStorage";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -29,27 +30,6 @@ const PROTOCOL_COLORS = [
 const PROTOCOL_ICONS = ['📋', '⚡', '🎯', '🔒', '📊', '🧠', '🌊', '🔥', '💡', '🛡️', '⚙️', '🎲'];
 
 const REGIMES = ['Trending', 'Ranging', 'Volatile', 'Low Volatility', 'News Driven'];
-
-const BLOCK_MENU: { type: BlockType; label: string; icon: React.ReactNode; desc: string }[] = [
-  { type: 'heading1',     label: 'Heading 1',      icon: <Hash className="w-4 h-4" />,       desc: 'Large section header' },
-  { type: 'heading2',     label: 'Heading 2',      icon: <Hash className="w-3.5 h-3.5" />,   desc: 'Medium section header' },
-  { type: 'heading3',     label: 'Heading 3',      icon: <Hash className="w-3 h-3" />,       desc: 'Small section header' },
-  { type: 'paragraph',    label: 'Text',           icon: <AlignLeft className="w-4 h-4" />,  desc: 'Plain paragraph' },
-  { type: 'bulletList',   label: 'Bullet List',    icon: <List className="w-4 h-4" />,       desc: 'Unordered list' },
-  { type: 'numberedList', label: 'Numbered List',  icon: <List className="w-4 h-4" />,       desc: 'Ordered list' },
-  { type: 'callout',      label: 'Callout',        icon: <Lightbulb className="w-4 h-4" />,  desc: 'Highlighted note' },
-  { type: 'table',        label: 'Table',          icon: <Table className="w-4 h-4" />,      desc: 'Data table' },
-  { type: 'image',        label: 'Image',          icon: <ImagePlus className="w-4 h-4" />,  desc: 'Upload an image' },
-  { type: 'divider',      label: 'Divider',        icon: <Minus className="w-4 h-4" />,      desc: 'Horizontal rule' },
-];
-
-function newBlock(protocolId: string, type: BlockType, order: number): ProtocolBlock {
-  const base = { id: crypto.randomUUID(), protocolId, type, content: '', sortOrder: order, createdAt: Date.now() };
-  if (type === 'table') return { ...base, metadata: { headers: ['Column 1', 'Column 2', 'Column 3'], rows: [['', '', '']] } };
-  if (type === 'image') return { ...base, metadata: { url: '', caption: '' } };
-  if (type === 'callout') return { ...base, metadata: { icon: '💡', color: '#ffd76e' } };
-  return { ...base, metadata: {} };
-}
 
 function parseScreenshots(s: string | null | undefined): string[] {
   if (!s) return [];
@@ -86,441 +66,104 @@ function calcStats(trades: ProtocolTrade[]) {
   return { n, wins, losses, bes, totalR, avgR, winRate, avgWin, avgLoss, pf, confidence };
 }
 
-// ─── Block Editor Component ───────────────────────────────────────────────────
+// ─── Protocol Notes Editor (BlockNote) ─────────────────────────────────────────
+// Replaces the old hand-rolled block-by-block editor. One free-flowing
+// Notion-style document per protocol — direct image paste, "/" commands,
+// drag-drop, tables, all native to BlockNote instead of hand-built.
 
-function BlockEditor({
-  block, onChange, onDelete, onAddAfter, onMoveUp, onMoveDown,
-  isFirst, isLast,
-}: {
-  block: ProtocolBlock;
-  onChange: (b: ProtocolBlock) => void;
-  onDelete: () => void;
-  onAddAfter: (type: BlockType) => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  isFirst: boolean;
-  isLast: boolean;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const meta = block.metadata as any;
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
-    }
-  }, [block.content]);
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const url = await uploadProtocolImage(file);
-      onChange({ ...block, metadata: { ...meta, url } });
-    } catch {
-      // fallback to base64
-      const b64 = await fileToBase64(file);
-      onChange({ ...block, metadata: { ...meta, url: b64 } });
-    }
-    e.target.value = '';
-  };
-
-  const textClass = "w-full bg-transparent focus:outline-none text-white resize-none leading-relaxed placeholder-[#2a2a2a]";
-
-  const renderContent = () => {
-    switch (block.type) {
-      case 'heading1':
-        return (
-          <textarea ref={textareaRef} value={block.content}
-            onChange={e => onChange({ ...block, content: e.target.value })}
-            placeholder="Heading 1"
-            className={`${textClass} text-2xl font-bold tracking-tight`}
-            style={{ minHeight: '40px' }}
-            rows={1} />
-        );
-      case 'heading2':
-        return (
-          <textarea ref={textareaRef} value={block.content}
-            onChange={e => onChange({ ...block, content: e.target.value })}
-            placeholder="Heading 2"
-            className={`${textClass} text-xl font-semibold`}
-            style={{ minHeight: '36px' }}
-            rows={1} />
-        );
-      case 'heading3':
-        return (
-          <textarea ref={textareaRef} value={block.content}
-            onChange={e => onChange({ ...block, content: e.target.value })}
-            placeholder="Heading 3"
-            className={`${textClass} text-base font-semibold text-[#aaa]`}
-            style={{ minHeight: '32px' }}
-            rows={1} />
-        );
-      case 'paragraph':
-        return (
-          <textarea ref={textareaRef} value={block.content}
-            onChange={e => onChange({ ...block, content: e.target.value })}
-            placeholder="Start writing..."
-            className={`${textClass} text-sm text-[#ccc]`}
-            style={{ minHeight: '28px' }}
-            rows={1} />
-        );
-      case 'bulletList':
-        return (
-          <div className="space-y-1">
-            {(block.content || '').split('\n').map((line, i, arr) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="mt-1 flex-shrink-0" style={{ fontSize: '8px', color: 'var(--t-accent)' }}>●</span>
-                <input
-                  value={line}
-                  onChange={e => {
-                    const lines = block.content.split('\n');
-                    lines[i] = e.target.value;
-                    onChange({ ...block, content: lines.join('\n') });
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const lines = block.content.split('\n');
-                      lines.splice(i + 1, 0, '');
-                      onChange({ ...block, content: lines.join('\n') });
-                    }
-                    if (e.key === 'Backspace' && line === '' && arr.length > 1) {
-                      e.preventDefault();
-                      const lines = block.content.split('\n').filter((_, j) => j !== i);
-                      onChange({ ...block, content: lines.join('\n') });
-                    }
-                  }}
-                  placeholder="List item"
-                  className="flex-1 bg-transparent focus:outline-none text-sm text-[#ccc] placeholder-[#2a2a2a]"
-                />
-              </div>
-            ))}
-          </div>
-        );
-      case 'numberedList':
-        return (
-          <div className="space-y-1">
-            {(block.content || '').split('\n').map((line, i, arr) => (
-              <div key={i} className="flex items-start gap-2">
-                <span className="text-[#666] mt-0.5 flex-shrink-0 text-xs font-mono w-4 text-right">{i + 1}.</span>
-                <input
-                  value={line}
-                  onChange={e => {
-                    const lines = block.content.split('\n');
-                    lines[i] = e.target.value;
-                    onChange({ ...block, content: lines.join('\n') });
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const lines = block.content.split('\n');
-                      lines.splice(i + 1, 0, '');
-                      onChange({ ...block, content: lines.join('\n') });
-                    }
-                    if (e.key === 'Backspace' && line === '' && arr.length > 1) {
-                      e.preventDefault();
-                      const lines = block.content.split('\n').filter((_, j) => j !== i);
-                      onChange({ ...block, content: lines.join('\n') });
-                    }
-                  }}
-                  placeholder="List item"
-                  className="flex-1 bg-transparent focus:outline-none text-sm text-[#ccc] placeholder-[#2a2a2a]"
-                />
-              </div>
-            ))}
-          </div>
-        );
-      case 'callout':
-        return (
-          <div className="flex gap-3 rounded-xl p-4" style={{ background: 'rgba(255,215,110,0.05)', border: '1px solid rgba(255,215,110,0.12)' }}>
-            <input
-              value={meta.icon || '💡'}
-              onChange={e => onChange({ ...block, metadata: { ...meta, icon: e.target.value } })}
-              className="bg-transparent focus:outline-none text-xl w-8 flex-shrink-0"
-              maxLength={4}
-            />
-            <textarea ref={textareaRef} value={block.content}
-              onChange={e => onChange({ ...block, content: e.target.value })}
-              placeholder="Write a callout note..."
-              className={`${textClass} text-sm`} style={{ color: 'var(--t-gold)', minHeight: '28px' }}
-              rows={1} />
-          </div>
-        );
-      case 'table': {
-        const headers: string[] = meta.headers || ['Col 1', 'Col 2'];
-        const rows: string[][] = meta.rows || [['', '']];
-        return (
-          <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#1e1e1e] bg-[#0d0d0d]">
-                  {headers.map((h, ci) => (
-                    <th key={ci} className="px-3 py-2 text-left">
-                      <input value={h}
-                        onChange={e => {
-                          const nh = [...headers]; nh[ci] = e.target.value;
-                          onChange({ ...block, metadata: { ...meta, headers: nh } });
-                        }}
-                        className="bg-transparent focus:outline-none text-xs font-semibold text-[#666] w-full"
-                        placeholder={`Column ${ci + 1}`}
-                      />
-                    </th>
-                  ))}
-                  <th className="px-2 py-2 w-8">
-                    <button onClick={() => {
-                      const nh = [...headers, `Col ${headers.length + 1}`];
-                      const nr = rows.map(r => [...r, '']);
-                      onChange({ ...block, metadata: { ...meta, headers: nh, rows: nr } });
-                    }} className="text-[#333] hover:text-[#555] text-xs">+</button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, ri) => (
-                  <tr key={ri} className="border-t border-[#111] group/row">
-                    {headers.map((_, ci) => (
-                      <td key={ci} className="px-3 py-2">
-                        <input value={row[ci] || ''}
-                          onChange={e => {
-                            const nr = rows.map((r, rj) => rj === ri ? r.map((c, cj) => cj === ci ? e.target.value : c) : [...r]);
-                            onChange({ ...block, metadata: { ...meta, rows: nr } });
-                          }}
-                          className="bg-transparent focus:outline-none text-xs text-[#ccc] w-full placeholder-[#2a2a2a]"
-                          placeholder="—"
-                        />
-                      </td>
-                    ))}
-                    <td className="px-2 py-2 w-8">
-                      <button onClick={() => {
-                        const nr = rows.filter((_, j) => j !== ri);
-                        onChange({ ...block, metadata: { ...meta, rows: nr.length ? nr : [[...headers.map(() => '')]] } });
-                      }} className="opacity-0 group-hover/row:opacity-100 text-[#333] hover:text-[#ff4f4f] transition-all text-xs">×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={headers.length + 1} className="px-3 py-2">
-                    <button onClick={() => {
-                      const nr = [...rows, headers.map(() => '')];
-                      onChange({ ...block, metadata: { ...meta, rows: nr } });
-                    }} className="text-xs text-[#333] hover:text-[#555] transition-colors">+ Add row</button>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        );
+function legacyBlocksToBlockNoteDoc(blocks: ProtocolBlock[]): unknown[] {
+  // One-time conversion so existing protocol notes aren't lost when a
+  // protocol is opened for the first time after this migration.
+  const headingLevel = (t: BlockType) => t === 'heading1' ? 1 : t === 'heading2' ? 2 : 3;
+  return blocks
+    .filter(b => b.content?.trim() || b.type === 'image' || b.type === 'table' || b.type === 'divider')
+    .map(b => {
+      switch (b.type) {
+        case 'heading1': case 'heading2': case 'heading3':
+          return { type: 'heading', props: { level: headingLevel(b.type) }, content: b.content };
+        case 'bulletList':
+          return { type: 'bulletListItem', content: b.content };
+        case 'numberedList':
+          return { type: 'numberedListItem', content: b.content };
+        case 'callout':
+          return { type: 'paragraph', props: { backgroundColor: 'yellow' }, content: `💡 ${b.content}` };
+        case 'divider':
+          return { type: 'paragraph', content: '---' };
+        case 'table': {
+          const meta = b.metadata as TableMeta;
+          return {
+            type: 'table',
+            content: {
+              type: 'tableContent',
+              rows: [meta.headers, ...meta.rows].map(cells => ({ cells })),
+            },
+          };
+        }
+        case 'image': {
+          const meta = b.metadata as ImageMeta;
+          return { type: 'image', props: { url: meta.url, caption: meta.caption || '' } };
+        }
+        default:
+          return { type: 'paragraph', content: b.content };
       }
-      case 'image':
-        return (
-          <div>
-            {meta.url ? (
-              <div className="relative group/img rounded-xl overflow-hidden border border-[#1e1e1e]">
-                <img src={meta.url} alt={meta.caption || ''} className="w-full object-cover max-h-[500px]" style={{ objectFit: 'contain', background: '#080808' }} />
-                <div className="absolute top-2 right-2 opacity-0 group-hover/img:opacity-100 transition-opacity flex gap-1">
-                  <button onClick={() => onChange({ ...block, metadata: { ...meta, url: '' } })}
-                    className="w-7 h-7 rounded-lg bg-black/70 flex items-center justify-center text-[#ff4f4f] hover:bg-black">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <div className="p-2 border-t border-[#1e1e1e]">
-                  <input value={meta.caption || ''}
-                    onChange={e => onChange({ ...block, metadata: { ...meta, caption: e.target.value } })}
-                    placeholder="Add a caption..."
-                    className="w-full bg-transparent focus:outline-none text-xs text-[#555] text-center placeholder-[#2a2a2a]"
-                  />
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => imageInputRef.current?.click()}
-                className="w-full rounded-xl border border-dashed border-[#1e1e1e] py-12 flex flex-col items-center gap-2 text-[#333] hover:text-[#555] hover:border-[#2a2a2a] transition-colors">
-                <ImagePlus className="w-6 h-6" />
-                <span className="text-xs">Click to upload image</span>
-              </button>
-            )}
-            <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
-          </div>
-        );
-      case 'divider':
-        return <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent)' }} />;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div
-      className="relative group/block"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setMenuOpen(false); setAddMenuOpen(false); }}
-    >
-      {/* Left controls */}
-      <div className={`absolute -left-12 top-1 flex gap-1 transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`}>
-        <button onClick={() => setAddMenuOpen(v => !v)}
-          className="w-6 h-6 rounded flex items-center justify-center text-[#333] hover:text-[#555] hover:bg-[#111] transition-colors">
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-        <button className="w-6 h-6 rounded flex items-center justify-center text-[#2a2a2a] hover:text-[#444] hover:bg-[#111] transition-colors cursor-grab">
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* Add menu */}
-      {addMenuOpen && (
-        <div className="absolute left-0 top-8 z-50 rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] py-1 shadow-2xl w-56"
-          style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
-          {BLOCK_MENU.map(bm => (
-            <button key={bm.type} onClick={() => { onAddAfter(bm.type); setAddMenuOpen(false); }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-[#111] transition-colors">
-              <span className="text-[#444]">{bm.icon}</span>
-              <div>
-                <p className="text-xs text-white font-medium">{bm.label}</p>
-                <p className="text-xs text-[#333]">{bm.desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Block content */}
-      <div className="py-1">
-        {renderContent()}
-      </div>
-
-      {/* Right controls */}
-      <div className={`absolute -right-8 top-1 transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`}>
-        <div className="relative">
-          <button onClick={() => setMenuOpen(v => !v)}
-            className="w-6 h-6 rounded flex items-center justify-center text-[#2a2a2a] hover:text-[#555] hover:bg-[#111] transition-colors">
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-7 z-50 rounded-xl border border-[#1e1e1e] bg-[#0d0d0d] py-1 shadow-2xl w-40"
-              style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.8)' }}>
-              {!isFirst && <button onClick={() => { onMoveUp(); setMenuOpen(false); }} className="w-full px-3 py-1.5 text-left text-xs text-[#666] hover:text-white hover:bg-[#111] transition-colors">Move up</button>}
-              {!isLast && <button onClick={() => { onMoveDown(); setMenuOpen(false); }} className="w-full px-3 py-1.5 text-left text-xs text-[#666] hover:text-white hover:bg-[#111] transition-colors">Move down</button>}
-              <button onClick={() => { onDelete(); setMenuOpen(false); }} className="w-full px-3 py-1.5 text-left text-xs text-[#ff4f4f] hover:bg-[#1a0505] transition-colors">Delete block</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+    });
 }
 
-// ─── Protocol Notes Editor ────────────────────────────────────────────────────
-
 function ProtocolNotesEditor({ protocol }: { protocol: Protocol }) {
-  const [blocks, setBlocks] = useState<ProtocolBlock[]>([]);
+  const [content, setContent] = useState<unknown[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    loadBlocks(protocol.id).then(b => {
-      if (b.length === 0) {
-        setBlocks([newBlock(protocol.id, 'paragraph', 0)]);
+    setLoading(true);
+    (async () => {
+      const stored = await loadProtocolContent(protocol.id);
+      if (stored && stored.length > 0) {
+        setContent(stored);
       } else {
-        setBlocks(b);
+        // Nothing saved in the new format yet — check for legacy blocks to migrate.
+        const legacy = await loadBlocks(protocol.id);
+        const migrated = legacy.length ? legacyBlocksToBlockNoteDoc(legacy) : [];
+        setContent(migrated);
+        if (migrated.length) await saveProtocolContent(protocol.id, migrated);
       }
       setLoading(false);
-    });
+    })();
   }, [protocol.id]);
 
-  const triggerSave = useCallback((newBlocks: ProtocolBlock[]) => {
+  const handleChange = useCallback((doc: unknown[]) => {
+    setContent(doc);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaved(false);
     saveTimer.current = setTimeout(async () => {
       setSaving(true);
       try {
-        await saveBlocks(newBlocks);
+        await saveProtocolContent(protocol.id, doc);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } finally {
         setSaving(false);
       }
-    }, 1200);
-  }, []);
+    }, 1000);
+  }, [protocol.id]);
 
-  const updateBlock = (idx: number, b: ProtocolBlock) => {
-    const nb = blocks.map((bl, i) => i === idx ? b : bl);
-    setBlocks(nb);
-    triggerSave(nb);
-  };
-
-  const addBlockAfter = (idx: number, type: BlockType) => {
-    const inserted = newBlock(protocol.id, type, 0);
-    const nb = [...blocks.slice(0, idx + 1), inserted, ...blocks.slice(idx + 1)].map((b, i) => ({ ...b, sortOrder: i }));
-    setBlocks(nb);
-    triggerSave(nb);
-  };
-
-  const deleteBlock_ = async (idx: number) => {
-    const b = blocks[idx];
-    await deleteBlock(b.id);
-    const nb = blocks.filter((_, i) => i !== idx).map((b, i) => ({ ...b, sortOrder: i }));
-    if (nb.length === 0) {
-      const fresh = [newBlock(protocol.id, 'paragraph', 0)];
-      setBlocks(fresh);
-    } else {
-      setBlocks(nb);
-      triggerSave(nb);
-    }
-  };
-
-  const moveBlock = (idx: number, dir: -1 | 1) => {
-    const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= blocks.length) return;
-    const nb = [...blocks];
-    [nb[idx], nb[newIdx]] = [nb[newIdx], nb[idx]];
-    const ordered = nb.map((b, i) => ({ ...b, sortOrder: i }));
-    setBlocks(ordered);
-    triggerSave(ordered);
-  };
-
-  if (loading) return <div className="text-[#333] text-sm py-12 text-center">Loading...</div>;
+  if (loading || content === null) return <div className="text-[#333] text-sm py-12 text-center">Loading...</div>;
 
   return (
     <div className="relative">
-      {/* Save indicator */}
-      <div className={`absolute top-0 right-0 flex items-center gap-1.5 text-xs transition-opacity ${saving || saved ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`absolute top-0 right-8 flex items-center gap-1.5 text-xs transition-opacity ${saving || saved ? 'opacity-100' : 'opacity-0'}`}>
         {saving ? <span className="text-[#444]">Saving...</span> : <span className="flex items-center gap-1" style={{ color: 'var(--t-accent)' }}><CheckCircle2 className="w-3 h-3" /> Saved</span>}
       </div>
-
-      <div className="pl-12 pr-8 py-2 space-y-1">
-        {blocks.map((block, idx) => (
-          <BlockEditor
-            key={block.id}
-            block={block}
-            onChange={b => updateBlock(idx, b)}
-            onDelete={() => deleteBlock_(idx)}
-            onAddAfter={type => addBlockAfter(idx, type)}
-            onMoveUp={() => moveBlock(idx, -1)}
-            onMoveDown={() => moveBlock(idx, 1)}
-            isFirst={idx === 0}
-            isLast={idx === blocks.length - 1}
-          />
-        ))}
-
-        {/* Add block button at end */}
-        <div className="pl-0 pt-4">
-          <div className="relative group/add">
-            <button onClick={() => addBlockAfter(blocks.length - 1, 'paragraph')}
-              className="flex items-center gap-2 text-xs text-[#2a2a2a] hover:text-[#444] transition-colors py-1">
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add a block</span>
-            </button>
-          </div>
-        </div>
+      <div className="pl-4 pr-8 py-2">
+        <BlockNoteEditor
+          key={protocol.id}
+          content={content}
+          onChange={handleChange}
+          uploadPathPrefix={`protocols/${protocol.id}`}
+          placeholder="Write your protocol notes, or press '/' for commands..."
+        />
       </div>
     </div>
   );

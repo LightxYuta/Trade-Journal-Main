@@ -111,6 +111,23 @@ export async function deleteProtocol(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ─── Protocol Notes Content (BlockNote document) ─────────────────────────────
+
+export async function loadProtocolContent(protocolId: string): Promise<unknown[] | null> {
+  const { data, error } = await supabase
+    .from('protocols')
+    .select('content')
+    .eq('id', protocolId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.content as unknown[]) || null;
+}
+
+export async function saveProtocolContent(protocolId: string, content: unknown[]): Promise<void> {
+  const { error } = await supabase.from('protocols').update({ content, updated_at: Date.now() }).eq('id', protocolId);
+  if (error) throw error;
+}
+
 // ─── Blocks CRUD ─────────────────────────────────────────────────────────────
 
 export async function loadBlocks(protocolId: string): Promise<ProtocolBlock[]> {

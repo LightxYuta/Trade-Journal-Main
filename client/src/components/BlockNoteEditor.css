@@ -1,0 +1,51 @@
+/* Re-skins BlockNote's default dark theme to match the journal's exact
+   palette (#0a0a0a / #080808 backgrounds, #1e1e1e borders, #00d28a accent)
+   instead of BlockNote's stock dark theme colors. */
+
+.bn-dark-wrapper .bn-container {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: #ffffff;
+  --bn-colors-menu-background: #0a0a0a;
+  --bn-colors-menu-text: #ffffff;
+  --bn-colors-tooltip-background: #111111;
+  --bn-colors-tooltip-text: #cccccc;
+  --bn-colors-hovered-background: #131313;
+  --bn-colors-selected-background: #1a1a1a;
+  --bn-colors-disabled-background: #0d0d0d;
+  --bn-colors-disabled-text: #444444;
+  --bn-colors-shadow: rgba(0, 0, 0, 0.6);
+  --bn-colors-border: #1e1e1e;
+  --bn-colors-side-menu: #444444;
+  --bn-border-radius: 12px;
+  font-family: "Inter", sans-serif;
+}
+
+.bn-dark-wrapper .bn-editor {
+  background: transparent;
+  padding: 0;
+  color: #ffffff;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.bn-dark-wrapper .bn-editor h1 { font-size: 1.5rem; font-weight: 700; }
+.bn-dark-wrapper .bn-editor h2 { font-size: 1.2rem; font-weight: 600; }
+.bn-dark-wrapper .bn-editor h3 { font-size: 1rem; font-weight: 600; color: #aaaaaa; }
+
+.bn-dark-wrapper .bn-editor [data-content-type="callout"] {
+  background: rgba(255, 215, 110, 0.06);
+  border: 1px solid rgba(255, 215, 110, 0.2);
+  border-radius: 12px;
+}
+
+.bn-dark-wrapper .bn-editor table {
+  border-color: #1e1e1e;
+}
+.bn-dark-wrapper .bn-editor th,
+.bn-dark-wrapper .bn-editor td {
+  border-color: #1e1e1e !important;
+}
+
+.bn-dark-wrapper .bn-editor ::selection {
+  background: rgba(0, 210, 138, 0.25);
+}
