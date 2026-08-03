@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, ImagePlus, Calendar as CalendarIcon, LayoutList } from "lucide-react";
-import DayView from "./daily-plan/DayView";
-import WeekView from "./daily-plan/WeekView";
+import DayView from "./DayView";
+import WeekView from "./WeekView";
 import {
   loadMonthCover, setMonthCover, uploadMonthCoverImage,
   loadMonthData, dayVisualStateFromData,
