@@ -149,6 +149,107 @@ export function computeStats(trades: Trade[]): TradeStats {
   };
 }
 
+export interface EdgeScoreAxis { key: string; label: string; raw: number; score: number }
+export interface EdgeScoreResult { overall: number; axes: EdgeScoreAxis[] }
+
+// Piecewise-linear interpolation across [minValue, maxValue, minScore, maxScore] bands,
+// matching TradeZella's Zella Score published thresholds exactly.
+function bandedScore(value: number, segments: [number, number, number, number][]): number {
+  for (const [lo, hi, sLo, sHi] of segments) {
+    if (value >= lo && value < hi) {
+      if (hi === Infinity || hi === lo) return sLo;
+      const t = (value - lo) / (hi - lo);
+      return sLo + t * (sHi - sLo);
+    }
+  }
+  return segments[segments.length - 1][3];
+}
+
+const RATIO_BANDS: [number, number, number, number][] = [
+  [-Infinity, 1.8, 20, 20],
+  [1.8, 1.9, 50, 59],
+  [1.9, 2.0, 60, 69],
+  [2.0, 2.2, 70, 79],
+  [2.2, 2.4, 80, 89],
+  [2.4, 2.6, 90, 99],
+  [2.6, Infinity, 100, 100],
+];
+
+const RECOVERY_BANDS: [number, number, number, number][] = [
+  [-Infinity, 1.0, 0, 0],
+  [1.0, 1.5, 1, 29],
+  [1.5, 2.0, 30, 49],
+  [2.0, 2.5, 50, 59],
+  [2.5, 3.0, 60, 69],
+  [3.0, 3.5, 70, 89],
+  [3.5, Infinity, 100, 100],
+];
+
+/**
+ * Edge Score — TradeZella's "Zella Score" methodology, adapted to R-multiples
+ * instead of dollars (everything here is already R-denominated, so no
+ * conversion is needed). Six weighted axes, each scored 0-100:
+ * Profit Factor 25%, Avg Win/Loss 20%, Max Drawdown 20%, Win% 15%,
+ * Recovery Factor 10%, Consistency 10%.
+ */
+export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
+  const axes: EdgeScoreAxis[] = [
+    { key: 'profitFactor', label: 'Profit factor', raw: 0, score: 0 },
+    { key: 'winLoss', label: 'Avg win/loss', raw: 0, score: 0 },
+    { key: 'drawdown', label: 'Max drawdown', raw: 0, score: 0 },
+    { key: 'winRate', label: 'Win %', raw: 0, score: 0 },
+    { key: 'recovery', label: 'Recovery factor', raw: 0, score: 0 },
+    { key: 'consistency', label: 'Consistency', raw: 0, score: 0 },
+  ];
+  const n = trades.length;
+  if (n === 0) return { overall: 0, axes };
+
+  let wins = 0, losses = 0, winSum = 0, lossSum = 0, totalR = 0;
+  let runningEquity = 0, maxEquity = 0, maxDrawdown = 0, peakBeforeDD = 0;
+  const dayTotals: Record<string, number> = {};
+
+  for (const t of trades) {
+    const r = t.realisedR || 0;
+    totalR += r;
+    runningEquity += r;
+    if (runningEquity > maxEquity) maxEquity = runningEquity;
+    const dd = maxEquity - runningEquity;
+    if (dd > maxDrawdown) { maxDrawdown = dd; peakBeforeDD = maxEquity; }
+    if (r > 0.0001) { wins++; winSum += r; }
+    else if (r < -0.0001) { losses++; lossSum += r; }
+    if (t.date) dayTotals[t.date] = (dayTotals[t.date] || 0) + r;
+  }
+
+  const winRate = (wins / n) * 100;
+  const avgWin = wins > 0 ? winSum / wins : 0;
+  const avgLoss = losses > 0 ? Math.abs(lossSum / losses) : 0;
+  const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
+  const profitFactor = losses > 0 && lossSum !== 0 ? winSum / Math.abs(lossSum) : (wins > 0 ? 100 : 0);
+  const maxDrawdownPct = peakBeforeDD > 0 ? (maxDrawdown / peakBeforeDD) * 100 : 0;
+  const recoveryFactor = maxDrawdown > 0 ? totalR / maxDrawdown : (totalR > 0 ? 100 : 0);
+
+  const dailyVals = Object.values(dayTotals);
+  let consistencyScore = 0;
+  if (totalR > 0 && dailyVals.length > 1) {
+    const mean = dailyVals.reduce((a, b) => a + b, 0) / dailyVals.length;
+    const variance = dailyVals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / dailyVals.length;
+    const stdDev = Math.sqrt(variance);
+    consistencyScore = Math.max(0, Math.min(100, 100 - (stdDev / totalR) * 100));
+  }
+
+  axes[0] = { key: 'profitFactor', label: 'Profit factor', raw: profitFactor, score: bandedScore(profitFactor, RATIO_BANDS) };
+  axes[1] = { key: 'winLoss', label: 'Avg win/loss', raw: winLossRatio, score: bandedScore(winLossRatio, RATIO_BANDS) };
+  axes[2] = { key: 'drawdown', label: 'Max drawdown', raw: maxDrawdownPct, score: Math.max(0, Math.min(100, 100 - maxDrawdownPct)) };
+  axes[3] = { key: 'winRate', label: 'Win %', raw: winRate, score: Math.max(0, Math.min(100, (winRate / 60) * 100)) };
+  axes[4] = { key: 'recovery', label: 'Recovery factor', raw: recoveryFactor, score: bandedScore(recoveryFactor, RECOVERY_BANDS) };
+  axes[5] = { key: 'consistency', label: 'Consistency', raw: 0, score: consistencyScore };
+
+  const WEIGHTS: Record<string, number> = { profitFactor: 0.25, winLoss: 0.20, drawdown: 0.20, winRate: 0.15, recovery: 0.10, consistency: 0.10 };
+  const overall = axes.reduce((sum, a) => sum + a.score * WEIGHTS[a.key], 0);
+
+  return { overall, axes };
+}
+
 export function getFilteredTrades(
   trades: Trade[],
   filter: string,

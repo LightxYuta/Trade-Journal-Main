@@ -4,13 +4,16 @@ import { useTradeContext } from "@/contexts/TradeContext";
 import { useYearFilter } from "@/contexts/YearFilterContext";
 import { TradingCard } from "@/components/TradingCard";
 import { StatCard } from "@/components/StatCard";
+import { KpiCard } from "@/components/KpiCard";
 import { FilterPills } from "@/components/FilterPills";
 import { Calendar } from "@/components/Calendar";
 import { EquityCurveChart } from "@/components/EquityCurveChart";
 import { WinLossChart } from "@/components/WinLossChart";
 import { StreakIndicator } from "@/components/StreakIndicator";
+import { EdgeScoreRadar } from "@/components/EdgeScoreRadar";
+import { PlanAdherenceCard } from "@/components/PlanAdherenceCard";
 import { YearSelector } from "@/components/YearSelector";
-import { computeStats, getFilteredTrades, formatR, formatDate } from "@/lib/tradeUtils";
+import { computeStats, getFilteredTrades, formatR, formatDate, computeEdgeScore } from "@/lib/tradeUtils";
 
 const FILTER_OPTIONS = [
   { id: "all", label: "All Time" },
@@ -18,41 +21,6 @@ const FILTER_OPTIONS = [
   { id: "week", label: "This Week" },
   { id: "month", label: "This Month" },
 ];
-
-const PROP_KEY = "tj_prop_firm_v1";
-
-interface PropConfig {
-  phase: string;
-  accountSize: number;
-  riskPercent: number;
-  profitTarget: number;
-  profitTargetP2: number;
-  maxDrawdown: number;
-  dailyLoss: number;
-  startDate: string;
-}
-
-const DEFAULT_PROP: PropConfig = {
-  phase: "Phase 1",
-  accountSize: 10000,
-  riskPercent: 2,
-  profitTarget: 8,
-  profitTargetP2: 5,
-  maxDrawdown: 10,
-  dailyLoss: 5,
-  startDate: new Date().toISOString().slice(0, 10),
-};
-
-function loadPropConfig(): PropConfig {
-  try {
-    const raw = localStorage.getItem(PROP_KEY);
-    return raw ? { ...DEFAULT_PROP, ...JSON.parse(raw) } : DEFAULT_PROP;
-  } catch { return DEFAULT_PROP; }
-}
-
-function savePropConfig(cfg: PropConfig) {
-  try { localStorage.setItem(PROP_KEY, JSON.stringify(cfg)); } catch {}
-}
 
 function parseScreenshots(screenshots: string | null | undefined): string[] {
   if (!screenshots) return [];
@@ -62,8 +30,6 @@ function parseScreenshots(screenshots: string | null | undefined): string[] {
   } catch {}
   return screenshots ? [screenshots] : [];
 }
-
-const PHASES = ["Phase 1", "Phase 2", "Funded"];
 
 export default function Dashboard() {
   const { trades, settings } = useTradeContext();
@@ -78,10 +44,26 @@ export default function Dashboard() {
   const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-  // Prop firm
-  const [propConfig, setPropConfig] = useState<PropConfig>(() => loadPropConfig());
-  const [editingProp, setEditingProp] = useState(false);
-  const [propDraft, setPropDraft] = useState<Record<string, string>>({});
+  // Calendar-driven month navigation — when the user navigates the calendar,
+  // the whole dashboard reflects that month instead of only the calendar grid.
+  const todayDate = new Date();
+  const [calYear, setCalYear] = useState(todayDate.getFullYear());
+  const [calMonth, setCalMonth] = useState(todayDate.getMonth());
+  const [filterSource, setFilterSource] = useState<'pill' | 'calendar'>('pill');
+
+  const handleFilterChange = (id: string) => {
+    setFilter(id);
+    setFilterSource('pill');
+    const t = new Date();
+    setCalYear(t.getFullYear());
+    setCalMonth(t.getMonth());
+  };
+
+  const handleCalendarMonthChange = (y: number, m: number) => {
+    setCalYear(y);
+    setCalMonth(m);
+    setFilterSource('calendar');
+  };
 
   useEffect(() => { localStorage.setItem("traderName", name); }, [name]);
   useEffect(() => { localStorage.setItem("traderQuote", quote); }, [quote]);
@@ -97,70 +79,34 @@ export default function Dashboard() {
     reader.readAsDataURL(file);
   };
 
-  const saveProp = () => {
-    const updated: PropConfig = {
-      phase: propDraft.phase || propConfig.phase,
-      accountSize: parseFloat(propDraft.accountSize) || propConfig.accountSize,
-      riskPercent: parseFloat(propDraft.riskPercent) || propConfig.riskPercent,
-      profitTarget: parseFloat(propDraft.profitTarget) || propConfig.profitTarget,
-      profitTargetP2: parseFloat(propDraft.profitTargetP2) || propConfig.profitTargetP2,
-      maxDrawdown: parseFloat(propDraft.maxDrawdown) || propConfig.maxDrawdown,
-      dailyLoss: parseFloat(propDraft.dailyLoss) || propConfig.dailyLoss,
-      startDate: propDraft.startDate || propConfig.startDate,
-    };
-    setPropConfig(updated);
-    savePropConfig(updated);
-    setEditingProp(false);
-  };
-
   const yearFilteredTrades = useMemo(() => {
     if (year === "all") return trades;
     return trades.filter(t => t.date && new Date(t.date).getFullYear() === year);
   }, [trades, year]);
 
-  const filteredTrades = useMemo(() => getFilteredTrades(yearFilteredTrades, filter), [yearFilteredTrades, filter]);
+  const filteredTrades = useMemo(() => {
+    if (filterSource === 'calendar') {
+      const first = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(calYear, calMonth + 1, 0).getDate();
+      const last = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      return getFilteredTrades(yearFilteredTrades, 'custom', first, last);
+    }
+    return getFilteredTrades(yearFilteredTrades, filter);
+  }, [yearFilteredTrades, filter, filterSource, calYear, calMonth]);
+
   const stats = useMemo(() => computeStats(filteredTrades), [filteredTrades]);
+  const edgeScore = useMemo(() => computeEdgeScore(filteredTrades), [filteredTrades]);
+
+  const equitySeries = useMemo(() => {
+    const sorted = [...filteredTrades].sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0));
+    let running = 0;
+    return sorted.map(t => (running += t.realisedR || 0));
+  }, [filteredTrades]);
 
   const tradesForCalendarDate = useMemo(() => {
     if (!calendarModalDate) return [] as typeof trades;
     return trades.filter(t => t.date === calendarModalDate).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [trades, calendarModalDate]);
-
-  // Prop firm calculations
-  const propCalc = useMemo(() => {
-    const rPerDollar = propConfig.riskPercent / 100 * propConfig.accountSize;
-    const activeTarget = propConfig.phase === "Phase 2" ? propConfig.profitTargetP2 : propConfig.profitTarget;
-    const profitTargetR = (activeTarget / 100 * propConfig.accountSize) / rPerDollar;
-    const maxDrawdownR = (propConfig.maxDrawdown / 100 * propConfig.accountSize) / rPerDollar;
-    const dailyLossR = (propConfig.dailyLoss / 100 * propConfig.accountSize) / rPerDollar;
-
-    // Total R since start date
-    const startTrades = trades.filter(t => t.date >= propConfig.startDate);
-    const totalR = startTrades.reduce((s, t) => s + (t.realisedR || 0), 0);
-
-    // Max drawdown from equity curve
-    let peak = 0, currentR = 0, maxDD = 0;
-    [...startTrades].sort((a, b) => a.date.localeCompare(b.date)).forEach(t => {
-      currentR += t.realisedR || 0;
-      if (currentR > peak) peak = currentR;
-      const dd = peak - currentR;
-      if (dd > maxDD) maxDD = dd;
-    });
-
-    // Today's R
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const todayR = trades.filter(t => t.date === todayKey).reduce((s, t) => s + (t.realisedR || 0), 0);
-
-    const profitPct = Math.max(Math.min((totalR / profitTargetR) * 100, 100), 0);
-    const ddPct = Math.max(Math.min((maxDD / maxDrawdownR) * 100, 100), 0);
-    const dailyLossPct = Math.max(Math.min((Math.abs(Math.min(todayR, 0)) / dailyLossR) * 100, 100), 0);
-
-    return {
-      totalR, profitTargetR, maxDrawdownR, dailyLossR, maxDD, todayR,
-      profitPct, ddPct, dailyLossPct,
-      rPerDollar,
-    };
-  }, [trades, propConfig]);
 
   const valueColor = (val: number) => val > 0.0001 ? "positive" as const : val < -0.0001 ? "negative" as const : "default" as const;
 
@@ -173,41 +119,87 @@ export default function Dashboard() {
           <p className="text-xs text-[#444]">Your trading performance at a glance</p>
         </div>
         <div className="flex items-center gap-2">
-          <FilterPills options={FILTER_OPTIONS} activeId={filter} onChange={setFilter} />
+          <FilterPills options={FILTER_OPTIONS} activeId={filterSource === 'pill' ? filter : '__calendar__'} onChange={handleFilterChange} />
           <YearSelector />
         </div>
       </div>
 
-      {/* Main grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      {/* Unified grid — everything lives in one 12-col canvas, no left/right split */}
+      <div className="grid grid-cols-12 gap-3">
 
-        {/* Left column */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <StatCard label="Total R" value={formatR(stats.totalR)} valueColor={valueColor(stats.totalR)} />
-            <StatCard label="Trades" value={stats.n} subtext={`${stats.wins}W · ${stats.losses}L · ${stats.bes}BE`} />
-            <StatCard label="Win Rate" value={`${stats.winrate.toFixed(1)}%`} />
-            <StatCard label="Avg R" value={formatR(stats.avgR)} valueColor={valueColor(stats.avgR)} />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <StatCard label="Profit Factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)} valueColor={stats.profitFactor > 1 ? "positive" : "negative"} />
-            <StatCard label="Expectancy" value={formatR(stats.expR)} valueColor={valueColor(stats.expR)} />
-            <StatCard label="Max Drawdown" value={formatR(-stats.maxDrawdown)} valueColor="negative" />
-            <StatCard label="Active Days" value={stats.activeDays} subtext={`Avg ${formatR(stats.avgPerDay)}/day`} />
-          </div>
+        {/* Top row — animated headline KPIs */}
+        <div className="col-span-6 sm:col-span-3">
+          <KpiCard label="Total R" value={formatR(stats.totalR)}
+            color={stats.totalR > 0 ? "#00d28a" : stats.totalR < 0 ? "#ff4f4f" : "#fff"}
+            accent={stats.totalR >= 0 ? "#00d28a" : "#ff4f4f"}
+            visual={{ type: "sparkline", points: equitySeries }} />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <KpiCard label="Trade win %" value={`${stats.winrate.toFixed(1)}%`}
+            accent={stats.winrate >= 50 ? "#00d28a" : "#ff4f4f"}
+            visual={{ type: "donut", pct: stats.winrate }} />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <KpiCard label="Profit factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
+            color={stats.profitFactor > 1 ? "#00d28a" : "#ff4f4f"}
+            accent="#ffd76e"
+            visual={{ type: "ring", pct: edgeScore.axes.find(a => a.key === 'profitFactor')?.score ?? 0 }} />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <KpiCard label="Avg win / loss" value={stats.winLossRatio.toFixed(2)}
+            accent="#00d28a"
+            visual={{ type: "splitbar", leftPct: (stats.avgWin + Math.abs(stats.avgLoss)) > 0 ? (stats.avgWin / (stats.avgWin + Math.abs(stats.avgLoss))) * 100 : 50 }} />
+        </div>
 
+        {/* Quiet row — Expectancy, Max Drawdown, Trades, Active Days */}
+        <div className="col-span-6 sm:col-span-3">
+          <StatCard label="Expectancy" value={formatR(stats.expR)} valueColor={valueColor(stats.expR)} />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <StatCard label="Max Drawdown" value={formatR(-stats.maxDrawdown)} valueColor="negative" />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <StatCard label="Trades" value={stats.n} subtext={`${stats.wins}W · ${stats.losses}L · ${stats.bes}BE`} />
+        </div>
+        <div className="col-span-6 sm:col-span-3">
+          <StatCard label="Active Days" value={stats.activeDays} subtext={`Avg ${formatR(stats.avgPerDay)}/day`} />
+        </div>
+
+        {/* Equity curve + Edge score */}
+        <div className="col-span-12 lg:col-span-8">
           <TradingCard title="Equity Curve" subtitle="Cumulative R over time">
             <EquityCurveChart trades={filteredTrades} />
           </TradingCard>
-
-          <TradingCard title="Calendar" subtitle="Daily R distribution for the month">
-            <Calendar trades={trades} onDayClick={(date) => { setCalendarModalDate(date); setCalendarModalOpen(true); }} />
+        </div>
+        <div className="col-span-12 lg:col-span-4">
+          <TradingCard title="Edge Score" subtitle="Zella-style composite score">
+            <EdgeScoreRadar result={edgeScore} />
           </TradingCard>
         </div>
 
-        {/* Right column */}
-        <div className="space-y-4">
-          {/* Trader card */}
+        {/* Calendar + Plan adherence */}
+        <div className="col-span-12 lg:col-span-8">
+          <TradingCard title="Calendar" subtitle="Daily R distribution for the month">
+            <Calendar trades={trades} year={calYear} month={calMonth} onMonthChange={handleCalendarMonthChange}
+              onDayClick={(date) => { setCalendarModalDate(date); setCalendarModalOpen(true); }} />
+          </TradingCard>
+        </div>
+        <div className="col-span-12 lg:col-span-4 flex flex-col gap-3">
+          <TradingCard title="Plan Adherence" subtitle="Streak and rule-following">
+            <PlanAdherenceCard />
+          </TradingCard>
+          <TradingCard title="Win/Loss Ratio" subtitle="Trade outcome distribution">
+            <WinLossChart stats={stats} />
+          </TradingCard>
+        </div>
+
+        {/* Streak + Trader card */}
+        <div className="col-span-12 sm:col-span-6">
+          <TradingCard title="Streak Tracker" subtitle="Current and historical streaks">
+            <StreakIndicator stats={stats} />
+          </TradingCard>
+        </div>
+        <div className="col-span-12 sm:col-span-6">
           <TradingCard className="p-0">
             <div className="relative flex flex-col items-center gap-3 px-4 pt-8 pb-4">
               {!editingName ? (
@@ -218,7 +210,7 @@ export default function Dashboard() {
               )}
               <label className="cursor-pointer w-full">
                 {image ? (
-                  <img src={image} className="w-full rounded-xl object-contain" />
+                  <img src={image} className="w-full rounded-xl object-contain" style={{ maxHeight: 140 }} />
                 ) : (
                   <div className="w-full h-[140px] flex items-center justify-center border border-[#1a1a1a] rounded-xl text-xs text-[#444]">
                     Click to upload image / GIF
@@ -232,133 +224,6 @@ export default function Dashboard() {
                 <textarea autoFocus rows={2} value={quote} onChange={(e) => setQuote(e.target.value)} onBlur={() => setEditingQuote(false)}
                   className="w-full bg-black text-xs italic text-center resize-none outline-none border border-[#222] rounded-lg p-2" />
               )}
-            </div>
-          </TradingCard>
-
-          {/* Win/Loss */}
-          <TradingCard title="Win/Loss Ratio" subtitle="Trade outcome distribution">
-            <WinLossChart stats={stats} />
-          </TradingCard>
-
-          {/* Streak */}
-          <TradingCard title="Streak Tracker" subtitle="Current and historical streaks">
-            <StreakIndicator stats={stats} />
-          </TradingCard>
-
-          {/* Prop Firm Card */}
-          <TradingCard>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm font-semibold text-white">Prop Firm</p>
-                <p className="text-xs text-[#444] mt-0.5">{propConfig.phase} · ${propConfig.accountSize.toLocaleString()} · {propConfig.riskPercent}% risk</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Phase pills */}
-                <div className="flex gap-1">
-                  {PHASES.map(p => (
-                    <button key={p} onClick={() => {
-                      const updated = { ...propConfig, phase: p };
-                      setPropConfig(updated);
-                      savePropConfig(updated);
-                    }}
-                      className="text-[10px] px-2 py-0.5 rounded-full border transition-all"
-                      style={{
-                        borderColor: propConfig.phase === p ? "rgba(0,210,138,0.4)" : "rgba(40,40,40,0.8)",
-                        background: propConfig.phase === p ? "rgba(0,210,138,0.08)" : "transparent",
-                        color: propConfig.phase === p ? "#00d28a" : "#444",
-                      }}>
-                      {p.replace("Phase ", "P")}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={() => { 
-                  setPropDraft({
-                    phase: propConfig.phase,
-                    accountSize: String(propConfig.accountSize),
-                    riskPercent: String(propConfig.riskPercent),
-                    profitTarget: String(propConfig.profitTarget),
-                    maxDrawdown: String(propConfig.maxDrawdown),
-                    dailyLoss: String(propConfig.dailyLoss),
-                    startDate: propConfig.startDate,
-                  }); 
-                  setEditingProp(true); 
-                }}
-                  className="text-xs text-[#444] hover:text-white transition-colors">Edit</button>
-              </div>
-            </div>
-
-            {/* Profit target */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-[#555]">Profit Target</span>
-                <span className="text-xs text-[#00d28a] font-medium">
-                  {propCalc.totalR >= 0 ? "+" : ""}{propCalc.totalR.toFixed(2)}R / {propCalc.profitTargetR.toFixed(1)}R
-                </span>
-              </div>
-              <div className="relative h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
-                <div className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${propCalc.profitPct}%`,
-                    background: propCalc.profitPct >= 100
-                      ? "linear-gradient(90deg, #00d28a, #00ff9d)"
-                      : "linear-gradient(90deg, #00a86b, #00d28a)",
-                    boxShadow: propCalc.profitPct > 50 ? "0 0 8px rgba(0,210,138,0.4)" : "none",
-                  }} />
-                {propCalc.profitPct >= 100 && (
-                  <span className="absolute right-1 top-0 h-full flex items-center text-[10px]">🎯</span>
-                )}
-              </div>
-              <div className="flex justify-between mt-1">
-                <span className="text-[10px] text-[#333]">0%</span>
-                <span className="text-[10px] text-[#333]">{propCalc.profitPct.toFixed(0)}% complete</span>
-                <span className="text-[10px] text-[#333]">+{propConfig.phase === "Phase 2" ? propConfig.profitTargetP2 : propConfig.profitTarget}%</span>
-              </div>
-            </div>
-
-            {/* Drawdown used */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-[#555]">Drawdown Used</span>
-                <span className={`text-xs font-medium ${propCalc.ddPct > 70 ? "text-[#ff4f4f]" : "text-[#888]"}`}>
-                  {propCalc.maxDD.toFixed(2)}R / {propCalc.maxDrawdownR.toFixed(1)}R
-                </span>
-              </div>
-              <div className="relative h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
-                <div className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${propCalc.ddPct}%`,
-                    background: propCalc.ddPct > 70
-                      ? "linear-gradient(90deg, #ff4f4f, #ff2222)"
-                      : propCalc.ddPct > 40
-                      ? "linear-gradient(90deg, #ffd76e, #ff9f1c)"
-                      : "linear-gradient(90deg, #444, #666)",
-                  }} />
-              </div>
-              <p className="text-[10px] text-[#333] mt-1">Max {propConfig.maxDrawdown}% allowed</p>
-            </div>
-
-            {/* Daily loss */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-[#555]">Today's Loss</span>
-                <span className={`text-xs font-medium ${propCalc.todayR < 0 ? "text-[#ff4f4f]" : "text-[#00d28a]"}`}>
-                  {propCalc.todayR >= 0 ? "+" : ""}{propCalc.todayR.toFixed(2)}R
-                </span>
-              </div>
-              <div className="relative h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
-                <div className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${propCalc.dailyLossPct}%`,
-                    background: propCalc.dailyLossPct > 70 ? "linear-gradient(90deg, #ff4f4f, #ff2222)" : "linear-gradient(90deg, #333, #555)",
-                  }} />
-              </div>
-              <p className="text-[10px] text-[#333] mt-1">Daily limit: {propCalc.dailyLossR.toFixed(1)}R ({propConfig.dailyLoss}%)</p>
-            </div>
-
-            {/* 1R in $ */}
-            <div className="mt-4 pt-3 border-t border-[#111] flex justify-between text-[10px] text-[#333]">
-              <span>1R = ${propCalc.rPerDollar.toFixed(0)}</span>
-              <span>Since {propConfig.startDate}</span>
             </div>
           </TradingCard>
         </div>
@@ -453,43 +318,6 @@ export default function Dashboard() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Prop firm edit modal */}
-      {editingProp && (
-        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
-          onClick={(e) => e.target === e.currentTarget && setEditingProp(false)}>
-          <div className="w-full max-w-sm rounded-2xl border border-[#1a1a1a] bg-[#0a0a0a]">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#111]">
-              <h2 className="text-sm font-semibold text-white">Prop Firm Settings</h2>
-              <button onClick={() => setEditingProp(false)} className="text-[#444] hover:text-white transition-colors"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              {[
-                { label: "Account Size ($)", key: "accountSize", type: "number" },
-                { label: "Risk per Trade (%)", key: "riskPercent", type: "number" },
-                { label: "Profit Target P1 (%)", key: "profitTarget", type: "number" },
-                { label: "Profit Target P2 (%)", key: "profitTargetP2", type: "number" },
-                { label: "Max Drawdown (%)", key: "maxDrawdown", type: "number" },
-                { label: "Daily Loss Limit (%)", key: "dailyLoss", type: "number" },
-                { label: "Challenge Start Date", key: "startDate", type: "date" },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs text-[#444] mb-1.5">{f.label}</label>
-                  <input type={f.type} value={propDraft[f.key] ?? ""}
-                    onChange={(e) => setPropDraft({ ...propDraft, [f.key]: e.target.value })}
-                    className="w-full bg-[#080808] border border-[#1a1a1a] rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#2a2a2a]"
-                    style={{ colorScheme: "dark" }}
-                    onFocus={(e) => e.target.select()} />
-                </div>
-              ))}
-              <div className="flex gap-2 pt-2">
-                <button onClick={saveProp} className="flex-1 py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-[#e8e8e8] transition-colors">Save</button>
-                <button onClick={() => setEditingProp(false)} className="flex-1 py-2.5 rounded-xl border border-[#1a1a1a] text-sm text-[#555] hover:text-white transition-colors">Cancel</button>
-              </div>
             </div>
           </div>
         </div>

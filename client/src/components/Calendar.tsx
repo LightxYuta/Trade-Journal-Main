@@ -6,6 +6,9 @@ import { getDayStats, classifyOutcome } from "@/lib/tradeUtils";
 interface CalendarProps {
   trades: Trade[];
   onDayClick?: (date: string) => void;
+  year?: number;
+  month?: number; // 0-indexed
+  onMonthChange?: (year: number, month: number) => void;
 }
 
 const MONTH_NAMES = [
@@ -13,10 +16,18 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-export function Calendar({ trades, onDayClick }: CalendarProps) {
+export function Calendar({ trades, onDayClick, year: yearProp, month: monthProp, onMonthChange }: CalendarProps) {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const [internalYear, setInternalYear] = useState(today.getFullYear());
+  const [internalMonth, setInternalMonth] = useState(today.getMonth());
+  const controlled = yearProp !== undefined && monthProp !== undefined;
+  const year = controlled ? yearProp! : internalYear;
+  const month = controlled ? monthProp! : internalMonth;
+
+  const setYearMonth = (y: number, m: number) => {
+    if (onMonthChange) onMonthChange(y, m);
+    if (!controlled) { setInternalYear(y); setInternalMonth(m); }
+  };
 
   const dayStats = useMemo(() => getDayStats(trades), [trades]);
 
@@ -89,26 +100,17 @@ export function Calendar({ trades, onDayClick }: CalendarProps) {
   }, [trades, year, month, dayStats]);
 
   const goToPrevMonth = () => {
-    if (month === 0) {
-      setMonth(11);
-      setYear(year - 1);
-    } else {
-      setMonth(month - 1);
-    }
+    if (month === 0) setYearMonth(year - 1, 11);
+    else setYearMonth(year, month - 1);
   };
 
   const goToNextMonth = () => {
-    if (month === 11) {
-      setMonth(0);
-      setYear(year + 1);
-    } else {
-      setMonth(month + 1);
-    }
+    if (month === 11) setYearMonth(year + 1, 0);
+    else setYearMonth(year, month + 1);
   };
 
   const goToToday = () => {
-    setYear(today.getFullYear());
-    setMonth(today.getMonth());
+    setYearMonth(today.getFullYear(), today.getMonth());
   };
 
   const isToday = (day: number) => {
