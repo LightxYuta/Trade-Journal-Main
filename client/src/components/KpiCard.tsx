@@ -75,7 +75,7 @@ function SplitBar({ leftPct, color }: { leftPct: number; color: string }) {
 
 export function KpiCard({ label, value, color = "#ffffff", visual, accent = "#00d28a" }: KpiCardProps) {
   return (
-    <div className="stat-card-trading" style={{ minHeight: 68 }}>
+    <div className="stat-card-trading">
       <div className="text-[0.74rem] text-[#b8b8b8]">{label}</div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
         <span className="text-lg font-semibold" style={{ color }}>{value}</span>

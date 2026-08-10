@@ -125,83 +125,51 @@ export default function Dashboard() {
       </div>
 
       {/* Unified grid — everything lives in one 12-col canvas, no left/right split */}
-      <div className="grid grid-cols-12 gap-3">
+      <div className="grid grid-cols-12 gap-3 lg:gap-2">
 
-        {/* Top row — animated headline KPIs */}
-        <div className="col-span-6 sm:col-span-3">
-          <KpiCard label="Total R" value={formatR(stats.totalR)}
-            color={stats.totalR > 0 ? "#00d28a" : stats.totalR < 0 ? "#ff4f4f" : "#fff"}
-            accent={stats.totalR >= 0 ? "#00d28a" : "#ff4f4f"}
-            visual={{ type: "sparkline", points: equitySeries }} />
-        </div>
-        <div className="col-span-6 sm:col-span-3">
-          <KpiCard label="Trade win %" value={`${stats.winrate.toFixed(1)}%`}
-            accent={stats.winrate >= 50 ? "#00d28a" : "#ff4f4f"}
-            visual={{ type: "donut", pct: stats.winrate }} />
-        </div>
-        <div className="col-span-6 sm:col-span-3">
-          <KpiCard label="Profit factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
-            color={stats.profitFactor > 1 ? "#00d28a" : "#ff4f4f"}
-            accent="#ffd76e"
-            visual={{ type: "ring", pct: edgeScore.axes.find(a => a.key === 'profitFactor')?.score ?? 0 }} />
-        </div>
-        <div className="col-span-6 sm:col-span-3">
-          <KpiCard label="Avg win / loss" value={stats.winLossRatio.toFixed(2)}
-            accent="#00d28a"
-            visual={{ type: "splitbar", leftPct: (stats.avgWin + Math.abs(stats.avgLoss)) > 0 ? (stats.avgWin / (stats.avgWin + Math.abs(stats.avgLoss))) * 100 : 50 }} />
-        </div>
-
-        {/* Quiet row — Expectancy, Max Drawdown, Trades, Active Days */}
-        <div className="col-span-6 sm:col-span-3">
-          <StatCard label="Expectancy" value={formatR(stats.expR)} valueColor={valueColor(stats.expR)} />
-        </div>
-        <div className="col-span-6 sm:col-span-3">
-          <StatCard label="Max Drawdown" value={formatR(-stats.maxDrawdown)} valueColor="negative" />
-        </div>
-        <div className="col-span-6 sm:col-span-3">
-          <StatCard label="Trades" value={stats.n} subtext={`${stats.wins}W · ${stats.losses}L · ${stats.bes}BE`} />
-        </div>
-        <div className="col-span-6 sm:col-span-3">
-          <StatCard label="Active Days" value={stats.activeDays} subtext={`Avg ${formatR(stats.avgPerDay)}/day`} />
-        </div>
-
-        {/* Equity curve + Edge score */}
+        {/* Top section — stats left, trader card right */}
         <div className="col-span-12 lg:col-span-8">
-          <TradingCard title="Equity Curve" subtitle="Cumulative R over time">
-            <EquityCurveChart trades={filteredTrades} />
-          </TradingCard>
+          <div className="grid grid-cols-12 gap-2 lg:gap-3">
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <KpiCard label="Total R" value={formatR(stats.totalR)}
+                color={stats.totalR > 0 ? "#00d28a" : stats.totalR < 0 ? "#ff4f4f" : "#fff"}
+                accent={stats.totalR >= 0 ? "#00d28a" : "#ff4f4f"}
+                visual={{ type: "sparkline", points: equitySeries }} />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <KpiCard label="Trade win %" value={`${stats.winrate.toFixed(1)}%`}
+                accent={stats.winrate >= 50 ? "#00d28a" : "#ff4f4f"}
+                visual={{ type: "donut", pct: stats.winrate }} />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <KpiCard label="Profit factor" value={stats.profitFactor === Infinity ? "∞" : stats.profitFactor.toFixed(2)}
+                color={stats.profitFactor > 1 ? "#00d28a" : "#ff4f4f"}
+                accent="#ffd76e"
+                visual={{ type: "ring", pct: edgeScore.axes.find(a => a.key === 'profitFactor')?.score ?? 0 }} />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <KpiCard label="Avg win / loss" value={stats.winLossRatio.toFixed(2)}
+                accent="#00d28a"
+                visual={{ type: "splitbar", leftPct: (stats.avgWin + Math.abs(stats.avgLoss)) > 0 ? (stats.avgWin / (stats.avgWin + Math.abs(stats.avgLoss))) * 100 : 50 }} />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <StatCard label="Expectancy" value={formatR(stats.expR)} valueColor={valueColor(stats.expR)} />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <StatCard label="Max Drawdown" value={formatR(-stats.maxDrawdown)} valueColor="negative" />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <StatCard label="Trades" value={stats.n} subtext={`${stats.wins}W · ${stats.losses}L · ${stats.bes}BE`} />
+            </div>
+            <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
+              <StatCard label="Active Days" value={stats.activeDays} subtext={`Avg ${formatR(stats.avgPerDay)}/day`} />
+            </div>
+          </div>
         </div>
+
         <div className="col-span-12 lg:col-span-4">
-          <TradingCard title="Edge Score" subtitle="Zella-style composite score">
-            <EdgeScoreRadar result={edgeScore} />
-          </TradingCard>
-        </div>
-
-        {/* Calendar + Plan adherence */}
-        <div className="col-span-12 lg:col-span-8">
-          <TradingCard title="Calendar" subtitle="Daily R distribution for the month">
-            <Calendar trades={trades} year={calYear} month={calMonth} onMonthChange={handleCalendarMonthChange}
-              onDayClick={(date) => { setCalendarModalDate(date); setCalendarModalOpen(true); }} />
-          </TradingCard>
-        </div>
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-3">
-          <TradingCard title="Plan Adherence" subtitle="Streak and rule-following">
-            <PlanAdherenceCard />
-          </TradingCard>
-          <TradingCard title="Win/Loss Ratio" subtitle="Trade outcome distribution">
-            <WinLossChart stats={stats} />
-          </TradingCard>
-        </div>
-
-        {/* Streak + Trader card */}
-        <div className="col-span-12 sm:col-span-6">
-          <TradingCard title="Streak Tracker" subtitle="Current and historical streaks">
-            <StreakIndicator stats={stats} />
-          </TradingCard>
-        </div>
-        <div className="col-span-12 sm:col-span-6">
-          <TradingCard className="p-0">
-            <div className="relative flex flex-col items-center gap-3 px-4 pt-8 pb-4">
+          <TradingCard className="h-full p-0">
+            <div className="relative flex h-full flex-col justify-between items-center gap-3 px-4 pt-8 pb-4">
               {!editingName ? (
                 <div className="absolute top-[-4px] text-sm font-semibold uppercase tracking-wider cursor-pointer" onClick={() => setEditingName(true)}>{name}</div>
               ) : (
@@ -225,6 +193,29 @@ export default function Dashboard() {
                   className="w-full bg-black text-xs italic text-center resize-none outline-none border border-[#222] rounded-lg p-2" />
               )}
             </div>
+          </TradingCard>
+        </div>
+
+        {/* Equity curve + Edge score */}
+        <div className="col-span-12 lg:col-span-8">
+          <TradingCard title="Equity Curve" subtitle="Cumulative R over time">
+            <EquityCurveChart trades={filteredTrades} />
+          </TradingCard>
+        </div>
+        <div className="col-span-12 lg:col-span-4">
+          <TradingCard title="Edge Score" subtitle="Zella-style composite score">
+            <EdgeScoreRadar result={edgeScore} />
+          </TradingCard>
+        </div>
+        <div className="col-span-12 lg:col-span-8">
+          <TradingCard title="Calendar" subtitle="Daily R distribution for the month">
+            <Calendar trades={trades} year={calYear} month={calMonth} onMonthChange={handleCalendarMonthChange}
+              onDayClick={(date) => { setCalendarModalDate(date); setCalendarModalOpen(true); }} />
+          </TradingCard>
+        </div>
+        <div className="col-span-12 lg:col-span-4">
+          <TradingCard title="Plan Adherence" subtitle="Streak and rule-following">
+            <PlanAdherenceCard />
           </TradingCard>
         </div>
       </div>

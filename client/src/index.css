@@ -298,7 +298,9 @@
   border: 1px solid rgba(60, 60, 60, 0.95);
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 4px;
+  min-height: 108px;
 }
 
 .calendar-day-trading {

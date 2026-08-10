@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Switch, Route } from "wouter";
-import { supabase } from "@/lib/supabase";
-import type { Session } from "@supabase/supabase-js";
 import { TradeProvider } from "@/contexts/TradeContext";
 import { YearFilterProvider } from "@/contexts/YearFilterContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -17,37 +15,9 @@ import Settings from "@/pages/Settings";
 import Protocols from "@/pages/Protocols";
 import DailyPlan from "@/pages/DailyPlan";
 import NotFound from "@/pages/not-found";
-import Auth from "@/pages/Auth";
 
 function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [checking, setChecking] = useState(true);
   const [sidebarMinimized, setSidebarMinimized] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setChecking(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (checking) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <div className="text-gray-400">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return <Auth />;
-  }
 
   return (
     <ThemeProvider>
