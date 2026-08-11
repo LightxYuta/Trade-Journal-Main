@@ -7,6 +7,7 @@ interface EdgeScoreRadarProps {
 const SIZE = 220;
 const CENTER = SIZE / 2;
 const MAX_R = 78;
+const LABEL_RADIUS = MAX_R + 18;
 
 function pointOnAxis(index: number, total: number, radius: number) {
   const angle = (Math.PI * 2 * index) / total - Math.PI / 2;
@@ -25,7 +26,7 @@ export function EdgeScoreRadar({ result }: EdgeScoreRadarProps) {
 
   return (
     <div className="flex flex-col items-center">
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" style={{ maxWidth: 260 }}>
+      <svg viewBox={"-20 -20 260 260"} width="100%" style={{ maxWidth: 240 }}>
         {ringLevels.map((lvl, i) => {
           const pts = axes.map((_, ai) => pointOnAxis(ai, n, MAX_R * lvl));
           return (
@@ -40,12 +41,32 @@ export function EdgeScoreRadar({ result }: EdgeScoreRadarProps) {
         <polygon points={dataPath} fill={color} fillOpacity={0.14} stroke={color} strokeWidth={1.5} strokeLinejoin="round" />
         {dataPoints.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={color} />)}
         {axes.map((a, i) => {
-          const labelPt = pointOnAxis(i, n, MAX_R + 22);
+          const labelPt = pointOnAxis(i, n, LABEL_RADIUS);
           const anchor = Math.abs(labelPt.x - CENTER) < 6 ? "middle" : labelPt.x > CENTER ? "start" : "end";
+          const lines = (() => {
+            switch (a.label) {
+              case "Profit factor":
+                return ["Profit", "factor"];
+              case "Avg win/loss":
+                return ["Avg win/", "loss"];
+              case "Max drawdown":
+                return ["Max", "drawdown"];
+              case "Recovery factor":
+                return ["Recovery", "factor"];
+              case "Consistency":
+                return ["Consis", "tency"];
+              default:
+                return [a.label];
+            }
+          })();
           return (
             <text key={i} x={labelPt.x} y={labelPt.y} textAnchor={anchor} dominantBaseline="middle"
               fontSize={9.5} fill="#666">
-              {a.label}
+              {lines.map((line, lineIndex) => (
+                <tspan key={lineIndex} x={labelPt.x} dy={lineIndex === 0 ? (lines.length === 2 ? -10 : 0) : 11}>
+                  {line}
+                </tspan>
+              ))}
             </text>
           );
         })}

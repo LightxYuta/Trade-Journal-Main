@@ -13,8 +13,9 @@ export function TradingCard({ title, subtitle, children, className = "", headerA
     <div
       className={`rounded-2xl relative overflow-hidden ${className}`}
       style={{
-        background: "#0a0a0a",
-        border: "1px solid rgba(255,255,255,0.04)",
+        background: "rgba(255,255,255,0.04)",
+        boxShadow: "0 22px 70px rgba(0,0,0,0.35)",
+        border: "none",
       }}
     >
       <div className="px-5 py-4">

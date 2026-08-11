@@ -1,37 +1,76 @@
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Calendar, Check } from "lucide-react";
 import { useTradeContext } from "@/contexts/TradeContext";
-import { useMemo } from "react";
 import { useYearFilter } from "@/contexts/YearFilterContext";
 
 export function YearSelector() {
   const { year, setYear } = useYearFilter();
   const { trades } = useTradeContext();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  // Get unique years from trades
   const years = useMemo(() => {
     const yearSet = new Set<number>();
     trades.forEach(trade => {
       if (trade.date) {
-        const y = new Date(trade.date).getFullYear();
-        yearSet.add(y);
+        const parsed = new Date(trade.date.includes("T") ? trade.date : `${trade.date}T00:00:00`);
+        if (!isNaN(parsed.getTime())) yearSet.add(parsed.getFullYear());
       }
     });
     return Array.from(yearSet).sort((a, b) => b - a);
   }, [trades]);
 
+  const displayLabel = year === "all" ? "All Time" : String(year);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   return (
-    <div className="flex items-center gap-2">
-      <label className="text-xs text-muted-foreground font-medium">Year:</label>
-      <select
-        className="rounded-lg bg-[#18181b] border border-border px-3 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#a78bfa]/60 shadow"
-        value={year}
-        onChange={e => setYear(e.target.value === "all" ? "all" : Number(e.target.value))}
-        style={{ boxShadow: year !== "all" ? "0 0 6px 1px #a78bfa33" : "none", borderColor: year !== "all" ? "#a78bfa99" : undefined, borderWidth: year !== "all" ? "1.5px" : undefined }}
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-[#666] hover:text-white transition-colors"
+        style={{ border: "1px solid transparent" }}
+        aria-label="Filter by year"
       >
-        <option value="all">All Time</option>
-        {years.map(y => (
-          <option key={y} value={y}>{y}</option>
-        ))}
-      </select>
+        <Calendar className="w-3.5 h-3.5" />
+        <span>{displayLabel}</span>
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1.5 w-40 rounded-xl border border-[#1a1a1a] bg-[#0a0a0a] shadow-lg z-20 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { setYear("all"); setOpen(false); }}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#141414] transition-colors"
+            style={{ color: year === "all" ? "#ffffff" : "#666" }}
+          >
+            All Time
+            {year === "all" && <Check className="w-3 h-3" style={{ color: "#00d28a" }} />}
+          </button>
+          {years.map(y => {
+            const isActive = year === y;
+            return (
+              <button
+                key={y}
+                type="button"
+                onClick={() => { setYear(y); setOpen(false); }}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#141414] transition-colors"
+                style={{ color: isActive ? "#ffffff" : "#666" }}
+              >
+                {y}
+                {isActive && <Check className="w-3 h-3" style={{ color: "#00d28a" }} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
