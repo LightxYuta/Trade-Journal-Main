@@ -115,15 +115,15 @@ export async function loadTrades(): Promise<Trade[]> {
   const trades = (data || []).map(row => ({
     ...row,
     entryTF: row.entry_tf,
-    riskPercent: row.risk_percent,
-    realisedR: row.realised_r,
-    maxR: row.max_r,
+    riskPercent: row.risk_percent == null ? null : Number(row.risk_percent),
+    realisedR: Number(row.realised_r ?? 0),
+    maxR: row.max_r == null ? null : Number(row.max_r),
     setupGrade: row.setup_grade,
     keyLevels: row.key_levels || [],
     mistakes: row.mistakes || [],
     protocolId: row.protocol_id || null,
     customFieldValues: parseCustomFieldValues(row.custom_field_values),
-    createdAt: row.created_at,
+    createdAt: Number(row.created_at),
   }));
   
   tradesCache = trades;
@@ -144,15 +144,15 @@ export async function loadTradesByProtocol(protocolId: string): Promise<Trade[]>
   return (data || []).map(row => ({
     ...row,
     entryTF: row.entry_tf,
-    riskPercent: row.risk_percent,
-    realisedR: row.realised_r,
-    maxR: row.max_r,
+    riskPercent: row.risk_percent == null ? null : Number(row.risk_percent),
+    realisedR: Number(row.realised_r ?? 0),
+    maxR: row.max_r == null ? null : Number(row.max_r),
     setupGrade: row.setup_grade,
     keyLevels: row.key_levels || [],
     mistakes: row.mistakes || [],
     protocolId: row.protocol_id || null,
     customFieldValues: parseCustomFieldValues(row.custom_field_values),
-    createdAt: row.created_at,
+    createdAt: Number(row.created_at),
   }));
 }
 

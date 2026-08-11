@@ -48,25 +48,25 @@ export function computeStats(trades: Trade[]): TradeStats {
 
   for (let i = 0; i < trades.length; i++) {
     const t = trades[i];
-    const r = t.realisedR || 0;
-    totalR += r;
+    const rawR = t.realisedR;
+    const r = typeof rawR === 'number' ? rawR : Number(rawR ?? 0);
+    const safeR = Number.isFinite(r) ? r : 0;
+    totalR += safeR;
 
-    runningEquity += r;
+    runningEquity += safeR;
     if (runningEquity > maxEquity) maxEquity = runningEquity;
     const dd = maxEquity - runningEquity;
     if (dd > maxDrawdown) maxDrawdown = dd;
 
-    if (r > 0.0001) {
+    if (safeR > 0.0001) {
       wins++;
-      winSum += r;
+      winSum += safeR;
       currentWinStreak++;
       currentLossStreak = 0;
       if (currentWinStreak > bestWinStreak) bestWinStreak = currentWinStreak;
-    } else if (r < -0.0001) {
+    } else if (safeR < -0.0001) {
       losses++;
-      lossSum += r;
-      currentLossStreak++;
-      currentWinStreak = 0;
+      lossSum += safeR;
       if (currentLossStreak > worstLossStreak) worstLossStreak = currentLossStreak;
     } else {
       bes++;
@@ -209,15 +209,17 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
   const dayTotals: Record<string, number> = {};
 
   for (const t of trades) {
-    const r = t.realisedR || 0;
-    totalR += r;
-    runningEquity += r;
+    const rawR = t.realisedR;
+    const r = typeof rawR === 'number' ? rawR : Number(rawR ?? 0);
+    const safeR = Number.isFinite(r) ? r : 0;
+    totalR += safeR;
+    runningEquity += safeR;
     if (runningEquity > maxEquity) maxEquity = runningEquity;
     const dd = maxEquity - runningEquity;
     if (dd > maxDrawdown) { maxDrawdown = dd; peakBeforeDD = maxEquity; }
-    if (r > 0.0001) { wins++; winSum += r; }
-    else if (r < -0.0001) { losses++; lossSum += r; }
-    if (t.date) dayTotals[t.date] = (dayTotals[t.date] || 0) + r;
+    if (safeR > 0.0001) { wins++; winSum += safeR; }
+    else if (safeR < -0.0001) { losses++; lossSum += safeR; }
+    if (t.date) dayTotals[t.date] = (dayTotals[t.date] || 0) + safeR;
   }
 
   const winRate = (wins / n) * 100;
@@ -238,7 +240,7 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
     const mean = dailyVals.reduce((a, b) => a + b, 0) / dailyVals.length;
     const variance = dailyVals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / dailyVals.length;
     const stdDev = Math.sqrt(variance);
-    if (mean !== 0) {
+    if (Number.isFinite(mean) && mean !== 0 && Number.isFinite(stdDev)) {
       consistencyScore = Math.max(0, Math.min(100, 100 - (stdDev / Math.abs(mean)) * 100));
     }
   }
