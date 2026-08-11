@@ -23,6 +23,15 @@ export function formatR(r: number): string {
   return `${r >= 0 ? "+" : ""}${r.toFixed(2)}R`;
 }
 
+function parseNumber(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value.replace(/,/g, "."));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
 export function computeStats(trades: Trade[]): TradeStats {
   const n = trades.length;
   const rValues = trades.map(t => t.realisedR || 0);
@@ -48,9 +57,7 @@ export function computeStats(trades: Trade[]): TradeStats {
 
   for (let i = 0; i < trades.length; i++) {
     const t = trades[i];
-    const rawR = t.realisedR;
-    const r = typeof rawR === 'number' ? rawR : Number(rawR ?? 0);
-    const safeR = Number.isFinite(r) ? r : 0;
+    const safeR = parseNumber(t.realisedR);
     totalR += safeR;
 
     runningEquity += safeR;
@@ -67,6 +74,8 @@ export function computeStats(trades: Trade[]): TradeStats {
     } else if (safeR < -0.0001) {
       losses++;
       lossSum += safeR;
+      currentLossStreak++;
+      currentWinStreak = 0;
       if (currentLossStreak > worstLossStreak) worstLossStreak = currentLossStreak;
     } else {
       bes++;
@@ -75,7 +84,7 @@ export function computeStats(trades: Trade[]): TradeStats {
     }
 
     if (t.date) {
-      dayTotals[t.date] = (dayTotals[t.date] || 0) + r;
+      dayTotals[t.date] = (dayTotals[t.date] || 0) + safeR;
     }
   }
 
@@ -93,7 +102,7 @@ export function computeStats(trades: Trade[]): TradeStats {
   const worstDay = activeDays > 0 ? Math.min(...dayValues) : 0;
 
   const avgWin = wins > 0 ? winSum / wins : 0;
-  const avgLoss = losses > 0 ? lossSum / losses : 0;
+  const avgLoss = losses > 0 ? Math.abs(lossSum / losses) : 0;
   const profitFactor = losses > 0 && lossSum !== 0 ? winSum / Math.abs(lossSum) : wins > 0 ? Infinity : 0;
 
   let expR = 0;
@@ -103,7 +112,7 @@ export function computeStats(trades: Trade[]): TradeStats {
     expR = pWin * avgWin + pLoss * avgLoss;
   }
 
-  const winLossRatio = avgLoss < 0 ? avgWin / Math.abs(avgLoss) : 0;
+  const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
 
   let sharpeRatio = 0;
   if (dailyReturns.length > 1) {
@@ -166,9 +175,12 @@ function bandedScore(value: number, segments: [number, number, number, number][]
 }
 
 const RATIO_BANDS: [number, number, number, number][] = [
-  [-Infinity, 1.8, 20, 20],
-  [1.8, 1.9, 50, 59],
-  [1.9, 2.0, 60, 69],
+  [-Infinity, 1.0, 0, 15],
+  [1.0, 1.2, 15, 25],
+  [1.2, 1.4, 25, 35],
+  [1.4, 1.6, 35, 45],
+  [1.6, 1.8, 45, 55],
+  [1.8, 2.0, 60, 69],
   [2.0, 2.2, 70, 79],
   [2.2, 2.4, 80, 89],
   [2.4, 2.6, 90, 99],
@@ -258,9 +270,10 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
   if (dailyVals.length > 1) {
     const mean = dailyVals.reduce((a, b) => a + b, 0) / dailyVals.length;
     const variance = dailyVals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / dailyVals.length;
-    const stdDev = Math.sqrt(variance);
-    if (Number.isFinite(mean) && mean !== 0 && Number.isFinite(stdDev)) {
-      consistencyScore = Math.max(0, Math.min(100, 100 - (stdDev / Math.abs(mean)) * 100));
+    const stdDev = Number.isFinite(variance) ? Math.sqrt(variance) : 0;
+    if (Number.isFinite(mean) && Number.isFinite(stdDev)) {
+      const ratio = Math.abs(mean) / (Math.abs(mean) + stdDev);
+      consistencyScore = Math.max(0, Math.min(100, ratio * 100));
     }
   }
 
