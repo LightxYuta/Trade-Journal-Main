@@ -109,7 +109,7 @@ export function computeStats(trades: Trade[]): TradeStats {
   if (n > 0) {
     const pWin = wins / n;
     const pLoss = losses / n;
-    expR = pWin * avgWin + pLoss * avgLoss;
+    expR = pWin * avgWin - pLoss * avgLoss;
   }
 
   const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
@@ -458,7 +458,7 @@ export function getStrategyPerformance(trades: Trade[]): StrategyPerformance[] {
     const avgLoss = losses > 0 ? lossSum / losses : 0;
     const pWin = n > 0 ? wins / n : 0;
     const pLoss = n > 0 ? losses / n : 0;
-    const expectancy = pWin * avgWin + pLoss * avgLoss;
+    const expectancy = pWin * avgWin - pLoss * avgLoss;
     
     return { name, trades: n, totalR, winRate, avgR, profitFactor, expectancy };
   });
