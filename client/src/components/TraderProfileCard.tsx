@@ -1,19 +1,58 @@
 import { useState, useEffect } from "react";
 
-function readImage(file: File, onLoad: (dataUrl: string) => void) {
-  const reader = new FileReader();
-  reader.onload = () => onLoad(reader.result as string);
-  reader.readAsDataURL(file);
+async function readImageDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      if (file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif")) {
+        resolve(dataUrl);
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1600;
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Canvas context unavailable"));
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.75));
+      };
+      img.onerror = () => reject(new Error("Failed to load image for compression"));
+      img.src = dataUrl;
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 export function TraderProfileCard() {
-  const [banner, setBanner] = useState(localStorage.getItem("traderBanner"));
+  const [banner, setBanner] = useState<string | null>(null);
 
-  const handleBannerUpload = (file: File) => {
-    readImage(file, (result) => {
+  useEffect(() => {
+    try {
+      setBanner(localStorage.getItem("traderBanner"));
+    } catch (error) {
+      console.warn("Could not read traderBanner from localStorage", error);
+    }
+  }, []);
+
+  const handleBannerUpload = async (file: File) => {
+    try {
+      const result = await readImageDataUrl(file);
       setBanner(result);
-      localStorage.setItem("traderBanner", result);
-    });
+      try {
+        localStorage.setItem("traderBanner", result);
+      } catch (error) {
+        console.warn("Failed to save trader banner to localStorage", error);
+      }
+    } catch (error) {
+      console.error("Failed to process banner image", error);
+    }
   };
 
   return (
