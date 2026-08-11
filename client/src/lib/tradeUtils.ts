@@ -223,18 +223,24 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
   const winRate = (wins / n) * 100;
   const avgWin = wins > 0 ? winSum / wins : 0;
   const avgLoss = losses > 0 ? Math.abs(lossSum / losses) : 0;
-  const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : 0;
-  const profitFactor = losses > 0 && lossSum !== 0 ? winSum / Math.abs(lossSum) : (wins > 0 ? 100 : 0);
-  const maxDrawdownPct = peakBeforeDD > 0 ? (maxDrawdown / peakBeforeDD) * 100 : 0;
+  const winLossRatio = avgLoss > 0 ? avgWin / avgLoss : (wins > 0 ? Infinity : 0);
+  const profitFactor = losses > 0 && lossSum !== 0 ? winSum / Math.abs(lossSum) : (wins > 0 ? Infinity : 0);
+  const maxDrawdownPct = maxDrawdown > 0
+    ? maxEquity > 0
+      ? (maxDrawdown / maxEquity) * 100
+      : 100
+    : 0;
   const recoveryFactor = maxDrawdown > 0 ? totalR / maxDrawdown : (totalR > 0 ? 100 : 0);
 
   const dailyVals = Object.values(dayTotals);
   let consistencyScore = 0;
-  if (totalR > 0 && dailyVals.length > 1) {
+  if (dailyVals.length > 1) {
     const mean = dailyVals.reduce((a, b) => a + b, 0) / dailyVals.length;
     const variance = dailyVals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / dailyVals.length;
     const stdDev = Math.sqrt(variance);
-    consistencyScore = Math.max(0, Math.min(100, 100 - (stdDev / totalR) * 100));
+    if (mean !== 0) {
+      consistencyScore = Math.max(0, Math.min(100, 100 - (stdDev / Math.abs(mean)) * 100));
+    }
   }
 
   axes[0] = { key: 'profitFactor', label: 'Profit factor', raw: profitFactor, score: bandedScore(profitFactor, RATIO_BANDS) };
@@ -242,7 +248,7 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
   axes[2] = { key: 'drawdown', label: 'Max drawdown', raw: maxDrawdownPct, score: Math.max(0, Math.min(100, 100 - maxDrawdownPct)) };
   axes[3] = { key: 'winRate', label: 'Win %', raw: winRate, score: Math.max(0, Math.min(100, (winRate / 60) * 100)) };
   axes[4] = { key: 'recovery', label: 'Recovery factor', raw: recoveryFactor, score: bandedScore(recoveryFactor, RECOVERY_BANDS) };
-  axes[5] = { key: 'consistency', label: 'Consistency', raw: 0, score: consistencyScore };
+  axes[5] = { key: 'consistency', label: 'Consistency', raw: consistencyScore, score: consistencyScore };
 
   const WEIGHTS: Record<string, number> = { profitFactor: 0.25, winLoss: 0.20, drawdown: 0.20, winRate: 0.15, recovery: 0.10, consistency: 0.10 };
   const overall = axes.reduce((sum, a) => sum + a.score * WEIGHTS[a.key], 0);
