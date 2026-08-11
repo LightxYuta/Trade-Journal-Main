@@ -652,21 +652,11 @@ export default function Protocols() {
   const [draftDesc, setDraftDesc] = useState('');
   const [draftColor, setDraftColor] = useState(PROTOCOL_COLORS[0]);
   const [draftIcon, setDraftIcon] = useState(PROTOCOL_ICONS[0]);
-  // per-protocol trade counts for dashboard cards
-  const [tradeCounts, setTradeCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    loadProtocols().then(async p => {
-      setProtocols(p);
-      // load trade counts for each protocol for the dashboard
-      const counts: Record<string, number> = {};
-      await Promise.all(p.map(async proto => {
-        const t = await loadProtocolTrades(proto.id);
-        counts[proto.id] = t.length;
-      }));
-      setTradeCounts(counts);
-      setLoading(false);
-    });
+    loadProtocols()
+      .then(p => setProtocols(p))
+      .finally(() => setLoading(false));
   }, []);
 
   const selected = protocols.find(p => p.id === selectedId) || null;
@@ -695,7 +685,6 @@ export default function Protocols() {
     } else {
       const p = await createProtocol({ name: draftName, description: draftDesc, color: draftColor, icon: draftIcon, sortOrder: protocols.length });
       setProtocols(prev => [...prev, p]);
-      setTradeCounts(prev => ({ ...prev, [p.id]: 0 }));
     }
     setIsCreating(false);
   };
@@ -825,102 +814,64 @@ export default function Protocols() {
           </button>
         </div>
       ) : (
-        /* ── Protocol Cards Grid ── */
-        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-          {protocols.map((p, idx) => {
-            const count = tradeCounts[p.id] ?? 0;
-            // staggered animation delay
-            const delay = `${idx * 60}ms`;
-            return (
-              <button
-                key={p.id}
-                onClick={() => handleOpenProtocol(p.id)}
-                className="group relative text-left rounded-2xl border border-[#1a1a1a] overflow-hidden transition-all duration-200 hover:border-[#2a2a2a] hover:-translate-y-0.5"
-                style={{
-                  background: '#0d0d0d',
-                  boxShadow: '0 0 0 0 transparent',
-                  animationDelay: delay,
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 32px ${p.color}18`;
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 0 transparent';
-                }}
-              >
-                {/* Color top bar */}
-                <div className="h-0.5 w-full" style={{ background: `linear-gradient(90deg, ${p.color}, ${p.color}00)` }} />
-
-                <div className="p-6">
-                  {/* Top row: icon + actions */}
-                  <div className="flex items-start justify-between mb-5">
-                    <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                      style={{ background: `${p.color}12`, border: `1px solid ${p.color}20` }}
-                    >
-                      {p.icon}
-                    </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={e => openEdit(p, e)}
-                        className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-white hover:border-[#333] transition-colors"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={e => handleDeleteProtocol(p.id, e)}
-                        className="w-7 h-7 rounded-lg border border-[#1e1e1e] flex items-center justify-center text-[#444] hover:text-[#ff4f4f] hover:border-[#2e1010] transition-colors"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Name + description */}
-                  <h3 className="text-sm font-semibold text-white mb-1 leading-tight">{p.name}</h3>
-                  {p.description
-                    ? <p className="text-xs text-[#444] leading-relaxed mb-5">{p.description}</p>
-                    : <p className="text-xs text-[#2a2a2a] leading-relaxed mb-5">No description</p>
-                  }
-
-                  {/* Footer stats */}
-                  <div className="flex items-center justify-between pt-4 border-t border-[#111]">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5">
-                        <BarChart2 className="w-3 h-3" style={{ color: p.color, opacity: 0.7 }} />
-                        <span className="text-xs text-[#444]">
-                          {count > 0 ? `${count} data trade${count !== 1 ? 's' : ''}` : 'No data yet'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <FileText className="w-3 h-3 text-[#333]" />
-                        <span className="text-xs text-[#333]">Notes</span>
-                      </div>
-                    </div>
-                    {/* Open arrow */}
-                    <div
-                      className="w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 group-hover:translate-x-0.5"
-                      style={{ color: p.color, opacity: 0.6 }}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                  </div>
+        <div className="space-y-3">
+          {protocols.map((p, idx) => (
+            <button
+              key={p.id}
+              onClick={() => handleOpenProtocol(p.id)}
+              className="group w-full flex items-center justify-between gap-4 rounded-2xl border border-[#1a1a1a] bg-[#0d0d0d] px-5 py-4 text-left transition-colors hover:border-[#2a2a2a] focus:outline-none focus:ring-2 focus:ring-[#444]"
+              style={{ backgroundImage: `linear-gradient(90deg, ${p.color}10, transparent)` }}
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0"
+                  style={{ background: `${p.color}15`, border: `1px solid ${p.color}20` }}
+                >
+                  {p.icon}
                 </div>
-              </button>
-            );
-          })}
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white truncate">{p.name}</h3>
+                  <p className="text-xs text-[#444] truncate">{p.description || 'No description'}</p>
+                </div>
+              </div>
 
-          {/* Add new card */}
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2 text-xs text-[#666]">
+                  <FileText className="w-3 h-3" />
+                  <span>Notes</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#888]" />
+              </div>
+
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-4 top-4">
+                <button
+                  onClick={e => openEdit(p, e)}
+                  className="w-8 h-8 rounded-lg border border-[#1e1e1e] bg-[#090909] flex items-center justify-center text-[#444] hover:text-white hover:border-[#333] transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={e => handleDeleteProtocol(p.id, e)}
+                  className="w-8 h-8 rounded-lg border border-[#1e1e1e] bg-[#090909] flex items-center justify-center text-[#444] hover:text-[#ff4f4f] hover:border-[#2e1010] transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </button>
+          ))}
+
           <button
             onClick={openCreate}
-            className="group relative text-left rounded-2xl border border-dashed border-[#1a1a1a] overflow-hidden transition-all duration-200 hover:border-[#2a2a2a] hover:bg-[#0d0d0d]"
-            style={{ minHeight: '180px' }}
+            className="w-full rounded-2xl border border-dashed border-[#1a1a1a] bg-[#0d0d0d] px-5 py-6 text-left text-[#aaa] hover:border-[#2a2a2a] hover:bg-[#0f0f0f] transition-colors"
           >
-            <div className="h-full flex flex-col items-center justify-center gap-2 p-6 text-[#2a2a2a] group-hover:text-[#444] transition-colors">
-              <div className="w-10 h-10 rounded-xl border border-dashed border-[#1e1e1e] group-hover:border-[#2a2a2a] flex items-center justify-center transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl border border-[#1e1e1e] flex items-center justify-center text-[#888]">
                 <Plus className="w-4 h-4" />
               </div>
-              <p className="text-xs font-medium">New Protocol</p>
+              <div>
+                <p className="text-sm font-semibold text-white">Create a new protocol</p>
+                <p className="text-xs text-[#666]">Simple, polished list navigation with fast loading.</p>
+              </div>
             </div>
           </button>
         </div>
