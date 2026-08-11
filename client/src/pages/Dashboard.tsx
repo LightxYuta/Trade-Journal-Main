@@ -12,6 +12,7 @@ import { WinLossChart } from "@/components/WinLossChart";
 import { StreakIndicator } from "@/components/StreakIndicator";
 import { EdgeScoreRadar } from "@/components/EdgeScoreRadar";
 import { PlanAdherenceCard } from "@/components/PlanAdherenceCard";
+import { TraderProfileCard } from "@/components/TraderProfileCard";
 import { YearSelector } from "@/components/YearSelector";
 import { computeStats, getFilteredTrades, formatR, formatDate, computeEdgeScore } from "@/lib/tradeUtils";
 
@@ -35,11 +36,6 @@ export default function Dashboard() {
   const { trades, settings } = useTradeContext();
   const { year } = useYearFilter();
   const [filter, setFilter] = useState(() => localStorage.getItem("tj_time_filter") || "all");
-  const [name, setName] = useState(localStorage.getItem("traderName") || "Trader");
-  const [editingName, setEditingName] = useState(false);
-  const [quote, setQuote] = useState(localStorage.getItem("traderQuote") || "Discipline first. Profits follow.");
-  const [editingQuote, setEditingQuote] = useState(false);
-  const [image, setImage] = useState(localStorage.getItem("traderImage"));
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -65,19 +61,7 @@ export default function Dashboard() {
     setFilterSource('calendar');
   };
 
-  useEffect(() => { localStorage.setItem("traderName", name); }, [name]);
-  useEffect(() => { localStorage.setItem("traderQuote", quote); }, [quote]);
   useEffect(() => { localStorage.setItem("tj_time_filter", filter); }, [filter]);
-
-  const handleImageUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setImage(result);
-      localStorage.setItem("traderImage", result);
-    };
-    reader.readAsDataURL(file);
-  };
 
   const yearFilteredTrades = useMemo(() => {
     if (year === "all") return trades;
@@ -111,7 +95,7 @@ export default function Dashboard() {
   const valueColor = (val: number) => val > 0.0001 ? "positive" as const : val < -0.0001 ? "negative" as const : "default" as const;
 
   return (
-    <div className="flex-1 overflow-y-auto p-5 space-y-4">
+    <div className="dashboard-main flex-1 overflow-y-auto p-5 space-y-4 bg-black text-white">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -124,11 +108,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Unified grid — everything lives in one 12-col canvas, no left/right split */}
+      {/* Unified grid — left and right columns stack independently */}
       <div className="grid grid-cols-12 gap-3 lg:gap-2">
-
-        {/* Top section — stats left, trader card right */}
-        <div className="col-span-12 lg:col-span-8">
+        <div className="col-span-12 lg:col-span-8 flex flex-col gap-3">
           <div className="grid grid-cols-12 gap-2 lg:gap-3">
             <div className="col-span-12 sm:col-span-6 lg:col-span-3 h-full">
               <KpiCard label="Total R" value={formatR(stats.totalR)}
@@ -165,57 +147,24 @@ export default function Dashboard() {
               <StatCard label="Active Days" value={stats.activeDays} subtext={`Avg ${formatR(stats.avgPerDay)}/day`} />
             </div>
           </div>
-        </div>
 
-        <div className="col-span-12 lg:col-span-4">
-          <TradingCard className="h-full p-0">
-            <div className="relative flex h-full flex-col justify-between items-center gap-3 px-4 pt-8 pb-4">
-              {!editingName ? (
-                <div className="absolute top-[-4px] text-sm font-semibold uppercase tracking-wider cursor-pointer" onClick={() => setEditingName(true)}>{name}</div>
-              ) : (
-                <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setEditingName(false)}
-                  className="absolute top-[-4px] bg-black text-center text-sm outline-none border border-[#222] rounded px-2" />
-              )}
-              <label className="cursor-pointer w-full">
-                {image ? (
-                  <img src={image} className="w-full rounded-xl object-contain" style={{ maxHeight: 140 }} />
-                ) : (
-                  <div className="w-full h-[140px] flex items-center justify-center border border-[#1a1a1a] rounded-xl text-xs text-[#444]">
-                    Click to upload image / GIF
-                  </div>
-                )}
-                <input type="file" accept="image/*,image/gif" hidden onChange={(e) => e.target.files && handleImageUpload(e.target.files[0])} />
-              </label>
-              {!editingQuote ? (
-                <div className="text-xs italic text-[#555] text-center cursor-pointer" onClick={() => setEditingQuote(true)}>"{quote}"</div>
-              ) : (
-                <textarea autoFocus rows={2} value={quote} onChange={(e) => setQuote(e.target.value)} onBlur={() => setEditingQuote(false)}
-                  className="w-full bg-black text-xs italic text-center resize-none outline-none border border-[#222] rounded-lg p-2" />
-              )}
-            </div>
-          </TradingCard>
-        </div>
-
-        {/* Equity curve + Edge score */}
-        <div className="col-span-12 lg:col-span-8">
           <TradingCard title="Equity Curve" subtitle="Cumulative R over time">
             <EquityCurveChart trades={filteredTrades} />
           </TradingCard>
-        </div>
-        <div className="col-span-12 lg:col-span-4">
-          <TradingCard title="Edge Score" subtitle="Zella-style composite score">
-            <EdgeScoreRadar result={edgeScore} />
-          </TradingCard>
-        </div>
-        <div className="col-span-12 lg:col-span-8">
+
           <TradingCard title="Calendar" subtitle="Daily R distribution for the month">
             <Calendar trades={trades} year={calYear} month={calMonth} onMonthChange={handleCalendarMonthChange}
               onDayClick={(date) => { setCalendarModalDate(date); setCalendarModalOpen(true); }} />
           </TradingCard>
         </div>
-        <div className="col-span-12 lg:col-span-4">
+
+        <div className="col-span-12 lg:col-span-4 flex flex-col gap-3">
+          <TraderProfileCard />
           <TradingCard title="Plan Adherence" subtitle="Streak and rule-following">
             <PlanAdherenceCard />
+          </TradingCard>
+          <TradingCard title="Edge Score">
+            <EdgeScoreRadar result={edgeScore} />
           </TradingCard>
         </div>
       </div>

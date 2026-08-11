@@ -78,7 +78,7 @@ export function KpiCard({ label, value, color = "#ffffff", visual, accent = "#00
     <div className="stat-card-trading">
       <div className="text-[0.74rem] text-[#b8b8b8]">{label}</div>
       <div className="flex items-end justify-between gap-2 mt-0.5">
-        <span className="text-lg font-semibold" style={{ color }}>{value}</span>
+        <span className="text-base font-semibold leading-none" style={{ color }}>{value}</span>
         {visual.type === "sparkline" && <Sparkline points={visual.points} color={accent} />}
         {visual.type === "donut" && <Donut pct={visual.pct} color={accent} />}
         {visual.type === "ring" && <Donut pct={visual.pct} color={accent} />}

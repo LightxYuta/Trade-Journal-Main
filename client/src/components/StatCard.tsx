@@ -29,8 +29,12 @@ export function StatCard({ label, value, subtext, valueColor = "default" }: Stat
       data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}
     >
       <div className="text-[0.74rem] text-[#b8b8b8]">{label}</div>
-      <div className={`text-base font-semibold ${getValueColorClass()}`}>{value}</div>
-      {subtext && <div className="text-[0.7rem] text-[#b8b8b8]">{subtext}</div>}
+      <div className="flex items-end justify-between gap-2 mt-0.5">
+        <span className={`text-base font-semibold leading-none ${getValueColorClass()}`}>{value}</span>
+        {subtext && (
+          <span className="text-[0.65rem] text-[#444] leading-none whitespace-nowrap">{subtext}</span>
+        )}
+      </div>
     </div>
   );
 }
