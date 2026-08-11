@@ -208,10 +208,18 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
   let runningEquity = 0, maxEquity = 0, maxDrawdown = 0, peakBeforeDD = 0;
   const dayTotals: Record<string, number> = {};
 
+  const parseNumber = (value: unknown): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const parsed = parseFloat(value.replace(/,/g, '.'));
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+
   for (const t of trades) {
     const rawR = t.realisedR;
-    const r = typeof rawR === 'number' ? rawR : Number(rawR ?? 0);
-    const safeR = Number.isFinite(r) ? r : 0;
+    const safeR = parseNumber(rawR);
     totalR += safeR;
     runningEquity += safeR;
     if (runningEquity > maxEquity) maxEquity = runningEquity;
@@ -234,6 +242,17 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
     : 0;
   const recoveryFactor = maxDrawdown > 0 ? totalR / maxDrawdown : (totalR > 0 ? 100 : 0);
 
+  const clampScore = (value: number) => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+  const safeProfitFactor = Number.isFinite(profitFactor) ? profitFactor : 100;
+  const safeWinLossRatio = Number.isFinite(winLossRatio) ? winLossRatio : 100;
+  const safeRecoveryFactor = Number.isFinite(recoveryFactor) ? recoveryFactor : 0;
+
+  const scoredProfitFactor = clampScore(bandedScore(safeProfitFactor, RATIO_BANDS));
+  const scoredWinLossRatio = clampScore(bandedScore(safeWinLossRatio, RATIO_BANDS));
+  const scoredDrawdown = clampScore(100 - maxDrawdownPct);
+  const scoredWinRate = clampScore((winRate / 60) * 100);
+  const scoredRecovery = clampScore(bandedScore(safeRecoveryFactor, RECOVERY_BANDS));
+
   const dailyVals = Object.values(dayTotals);
   let consistencyScore = 0;
   if (dailyVals.length > 1) {
@@ -245,15 +264,20 @@ export function computeEdgeScore(trades: Trade[]): EdgeScoreResult {
     }
   }
 
-  axes[0] = { key: 'profitFactor', label: 'Profit factor', raw: profitFactor, score: bandedScore(profitFactor, RATIO_BANDS) };
-  axes[1] = { key: 'winLoss', label: 'Avg win/loss', raw: winLossRatio, score: bandedScore(winLossRatio, RATIO_BANDS) };
-  axes[2] = { key: 'drawdown', label: 'Max drawdown', raw: maxDrawdownPct, score: Math.max(0, Math.min(100, 100 - maxDrawdownPct)) };
-  axes[3] = { key: 'winRate', label: 'Win %', raw: winRate, score: Math.max(0, Math.min(100, (winRate / 60) * 100)) };
-  axes[4] = { key: 'recovery', label: 'Recovery factor', raw: recoveryFactor, score: bandedScore(recoveryFactor, RECOVERY_BANDS) };
-  axes[5] = { key: 'consistency', label: 'Consistency', raw: consistencyScore, score: consistencyScore };
+  axes[0] = { key: 'profitFactor', label: 'Profit factor', raw: safeProfitFactor, score: scoredProfitFactor };
+  axes[1] = { key: 'winLoss', label: 'Avg win/loss', raw: safeWinLossRatio, score: scoredWinLossRatio };
+  axes[2] = { key: 'drawdown', label: 'Max drawdown', raw: maxDrawdownPct, score: scoredDrawdown };
+  axes[3] = { key: 'winRate', label: 'Win %', raw: winRate, score: scoredWinRate };
+  axes[4] = { key: 'recovery', label: 'Recovery factor', raw: safeRecoveryFactor, score: scoredRecovery };
+  axes[5] = { key: 'consistency', label: 'Consistency', raw: consistencyScore, score: clampScore(consistencyScore) };
 
   const WEIGHTS: Record<string, number> = { profitFactor: 0.25, winLoss: 0.20, drawdown: 0.20, winRate: 0.15, recovery: 0.10, consistency: 0.10 };
-  const overall = axes.reduce((sum, a) => sum + a.score * WEIGHTS[a.key], 0);
+  const overallValue = axes.reduce((sum, a) => {
+    const weight = WEIGHTS[a.key] ?? 0;
+    const score = Number.isFinite(a.score) ? a.score : 0;
+    return sum + score * weight;
+  }, 0);
+  const overall = Number.isFinite(overallValue) ? overallValue : 0;
 
   return { overall, axes };
 }

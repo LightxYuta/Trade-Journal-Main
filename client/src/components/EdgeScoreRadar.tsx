@@ -18,8 +18,11 @@ export function EdgeScoreRadar({ result }: EdgeScoreRadarProps) {
   const { axes, overall } = result;
   const n = axes.length;
 
+  const clampScore = (score: number) => Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+  const normalizedAxes = axes.map(a => ({ ...a, score: clampScore(a.score) }));
+
   const ringLevels = [0.25, 0.5, 0.75, 1];
-  const dataPoints = axes.map((a, i) => pointOnAxis(i, n, (a.score / 100) * MAX_R));
+  const dataPoints = normalizedAxes.map((a, i) => pointOnAxis(i, n, (a.score / 100) * MAX_R));
   const dataPath = dataPoints.map(p => `${p.x},${p.y}`).join(" ");
 
   const color = overall >= 70 ? "#00d28a" : overall >= 45 ? "#ffd76e" : "#ff4f4f";
