@@ -3,7 +3,7 @@ import { isCleanLossTag } from "./cleanLoss";
 
 export function sequenceGrade(trade: Trade) {
   const grade = trade.setupGrade?.trim().replace(/\s+/g, " ").toLowerCase();
-  return grade === "a+" ? "A+" : grade === "fake a+" ? "Fake A+" : null;
+  return grade === "a+" ? "A+" : grade === "a" ? "A" : grade === "fake a+" ? "Fake A+" : grade === "b" ? "B" : grade === "retard" ? "Retard" : null;
 }
 
 export function sequenceTrades(trades: Trade[], clean: boolean) {
@@ -15,10 +15,17 @@ export function sequenceTrades(trades: Trade[], clean: boolean) {
 export function sequenceStats(trades: Trade[]) {
   const aPlus = trades.filter(t => sequenceGrade(t) === "A+").length;
   const fake = trades.filter(t => sequenceGrade(t) === "Fake A+").length;
+  const a = trades.filter(t => sequenceGrade(t) === "A").length;
+  const b = trades.filter(t => sequenceGrade(t) === "B").length;
+  const retard = trades.filter(t => sequenceGrade(t) === "Retard").length;
+  const good = aPlus + a;
+  const bad = fake + b + retard;
+  const classified = good + bad;
   return {
     totalR: trades.reduce((sum, t) => sum + t.realisedR, 0),
     activeDays: new Set(trades.map(t => t.date).filter(Boolean)).size,
-    aPlus, fake, purity: aPlus + fake ? `${Math.round(aPlus / (aPlus + fake) * 100)}%` : "—",
+    aPlus, a, fake, b, retard, good, bad, unclassified: trades.length - classified,
+    purity: classified ? `${Math.round(good / classified * 100)}%` : "—",
     wins: trades.filter(t => t.realisedR > 0.0001).length,
     losses: trades.filter(t => t.realisedR < -0.0001).length,
     bes: trades.filter(t => Math.abs(t.realisedR) <= 0.0001).length,
