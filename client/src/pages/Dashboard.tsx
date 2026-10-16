@@ -6,6 +6,7 @@ import { TradingCard } from "@/components/TradingCard";
 import { StatCard } from "@/components/StatCard";
 import { KpiCard } from "@/components/KpiCard";
 import { FilterPills } from "@/components/FilterPills";
+import { Sequence, SequenceSwitch } from "@/components/Sequence";
 import { Calendar } from "@/components/Calendar";
 import { EquityCurveChart } from "@/components/EquityCurveChart";
 import { WinLossChart } from "@/components/WinLossChart";
@@ -38,6 +39,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState(() => localStorage.getItem("tj_time_filter") || "all");
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
+  const [dashboardView, setDashboardView] = useState("Calendar");
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   // Calendar-driven month navigation — when the user navigates the calendar,
@@ -152,9 +154,12 @@ export default function Dashboard() {
             <EquityCurveChart trades={filteredTrades} />
           </TradingCard>
 
-          <TradingCard title="Calendar" subtitle="Daily R distribution for the month">
+          <TradingCard title={dashboardView} subtitle={dashboardView === "Calendar" ? "Daily R distribution for the month" : "Performance in fixed trade samples"}
+            headerActions={<SequenceSwitch options={["Calendar", "Sequence"]} value={dashboardView} onChange={setDashboardView} label="Calendar section view" />}>
+            {dashboardView === "Sequence" ? <Sequence trades={filteredTrades} /> : (
             <Calendar trades={trades} year={calYear} month={calMonth} onMonthChange={handleCalendarMonthChange}
               onDayClick={(date) => { setCalendarModalDate(date); setCalendarModalOpen(true); }} />
+            )}
           </TradingCard>
         </div>
 
